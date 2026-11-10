@@ -21,7 +21,7 @@ const DEFAULT_COVER_IMAGE = '/src/assets/images/cover_banner_1794189133145.jpg';
 export const DEFAULT_SETTINGS: AppSettings = {
   appName: 'บิลเฮา',
   slogan: 'ระบบเตือนและควบคุมรายจ่ายประจำวัน & เดือน',
-  revision: 'Rev. 1.1.6',
+  revision: 'Rev. 1.1.7',
   coverImage: DEFAULT_COVER_IMAGE,
   adminPhone: '099-225-6601',
   adminName: 'ช่างหน่อยชุมแพ',
@@ -306,7 +306,7 @@ export const storageService = {
         ...DEFAULT_SETTINGS,
         appName: userName ? `บิลของฉัน ${userName}` : (userToken ? 'บิลของฉัน' : 'บิลเฮา'),
         slogan: userToken ? 'วางแผนการเงิน เพื่ออนาคตที่มั่นคง' : 'ระบบเตือนและควบคุมรายจ่ายประจำวัน & เดือน',
-        revision: 'Rev. 1.1.6',
+        revision: 'Rev. 1.1.7',
       };
       this.saveAppSettings(initial, userToken);
       return initial;
@@ -316,7 +316,7 @@ export const storageService = {
       return {
         ...DEFAULT_SETTINGS,
         ...parsed,
-        revision: 'Rev. 1.1.6', // Real-time revision sync on every deploy!
+        revision: 'Rev. 1.1.7', // Real-time revision sync on every deploy!
       };
     } catch {
       return DEFAULT_SETTINGS;

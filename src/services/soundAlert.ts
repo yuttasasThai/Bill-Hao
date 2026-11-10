@@ -1,63 +1,138 @@
 /**
- * Voice and sound alerts for over-budget warnings
- * Announcement: "วันนี้รายจ่ายเกินงบ พรุ่งนี้เริ่มใหม่นะครับ สู้ๆครับ" (Repeats 2-3 times)
+ * Enhanced Voice and Chime Alert Service for Over-Budget Warnings
+ *
+ * Supported Announcements:
+ * 1. Daily Over Budget: "วันนี้คุณใช้จ่ายเกินตามที่ตั้งไว้ พรุ่งนี้เริ่มต้นใหม่นะครับ สู้ๆนะครับ"
+ * 2. Monthly Over Budget: "เดือนนี้ค่าใช้จ่ายประจำเดือนเกิน เดือนหน้าเริ่มต้นใหม่นะครับสู้ๆครับ"
  */
 
-let isCurrentlySpeaking = false;
+let sharedAudioCtx: AudioContext | null = null;
+let cachedVoices: SpeechSynthesisVoice[] = [];
+let activeUtterance: SpeechSynthesisUtterance | null = null;
 
-export const playOverBudgetVoiceAlert = (repeats: number = 3) => {
-  if (typeof window === 'undefined') return;
-
-  // 1. Play chime tone using Web Audio API
+// Initialize and unlock AudioContext on modern mobile browsers
+export const getAudioContext = (): AudioContext | null => {
+  if (typeof window === 'undefined') return null;
   try {
-    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (AudioContextClass) {
-      const audioCtx = new AudioContextClass();
+    if (!sharedAudioCtx) {
+      const AudioContextClass =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (AudioContextClass) {
+        sharedAudioCtx = new AudioContextClass();
+      }
+    }
+    if (sharedAudioCtx && sharedAudioCtx.state === 'suspended') {
+      sharedAudioCtx.resume().catch(() => {});
+    }
+  } catch {
+    // Non-fatal
+  }
+  return sharedAudioCtx;
+};
+
+// Preload voices cache
+if (typeof window !== 'undefined') {
+  if ('speechSynthesis' in window) {
+    cachedVoices = window.speechSynthesis.getVoices();
+    window.speechSynthesis.onvoiceschanged = () => {
+      cachedVoices = window.speechSynthesis.getVoices();
+    };
+  }
+
+  // Auto unlock on first user gesture (touch or click)
+  const unlockAudio = () => {
+    getAudioContext();
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.resume();
+    }
+    window.removeEventListener('click', unlockAudio);
+    window.removeEventListener('touchstart', unlockAudio);
+  };
+  window.addEventListener('click', unlockAudio, { passive: true, once: true });
+  window.addEventListener('touchstart', unlockAudio, { passive: true, once: true });
+}
+
+/**
+ * Play a clear, melodic 3-tone attention chime using Web Audio API
+ */
+export const playAttentionChime = () => {
+  try {
+    const audioCtx = getAudioContext();
+    if (!audioCtx) return;
+
+    const now = audioCtx.currentTime;
+
+    // 3 Ascending Notes: F5 (698Hz) -> A5 (880Hz) -> C6 (1046Hz)
+    const notes = [698.46, 880.0, 1046.5];
+    notes.forEach((freq, idx) => {
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
 
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
-      osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.15); // A5
+      osc.frequency.setValueAtTime(freq, now + idx * 0.12);
 
-      gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.45);
+      gain.gain.setValueAtTime(0, now + idx * 0.12);
+      gain.gain.linearRampToValueAtTime(0.3, now + idx * 0.12 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.12 + 0.35);
 
       osc.connect(gain);
       gain.connect(audioCtx.destination);
 
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.45);
-    }
+      osc.start(now + idx * 0.12);
+      osc.stop(now + idx * 0.12 + 0.36);
+    });
   } catch {
-    // Ignore audio context autoplay restrictions
+    // Non-fatal
   }
+};
 
-  // 2. Play SpeechSynthesis in Thai
+/**
+ * Speak a Thai message using Web Speech API with retry loop
+ */
+const speakThaiMessage = (message: string, repeats: number = 2) => {
+  if (typeof window === 'undefined') return;
+
+  // Always play attention chime first
+  playAttentionChime();
+
   if (!('speechSynthesis' in window)) return;
 
-  if (isCurrentlySpeaking) {
+  try {
     window.speechSynthesis.cancel();
+    window.speechSynthesis.resume();
+  } catch {
+    // Non-fatal
   }
 
-  isCurrentlySpeaking = true;
-  const message = 'วันนี้รายจ่ายเกินงบ พรุ่งนี้เริ่มใหม่นะครับ สู้ๆครับ';
   let count = 0;
 
-  const speakLoop = () => {
+  const speakOnce = () => {
     if (count >= repeats) {
-      isCurrentlySpeaking = false;
+      activeUtterance = null;
       return;
     }
 
+    try {
+      window.speechSynthesis.resume();
+    } catch {}
+
     const utterance = new SpeechSynthesisUtterance(message);
     utterance.lang = 'th-TH';
-    utterance.rate = 0.95; // slightly slower for clear listening
-    utterance.pitch = 1.05;
+    utterance.rate = 0.95; // Clear natural Thai pace
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
 
     // Pick a Thai voice if available
-    const voices = window.speechSynthesis.getVoices();
-    const thaiVoice = voices.find((v) => v.lang.includes('th') || v.lang.includes('TH'));
+    const voices = cachedVoices.length > 0 ? cachedVoices : window.speechSynthesis.getVoices();
+    const thaiVoice = voices.find(
+      (v) =>
+        v.lang === 'th-TH' ||
+        v.lang === 'th_TH' ||
+        v.lang.toLowerCase().includes('th') ||
+        v.name.toLowerCase().includes('thai')
+    );
+
     if (thaiVoice) {
       utterance.voice = thaiVoice;
     }
@@ -65,18 +140,48 @@ export const playOverBudgetVoiceAlert = (repeats: number = 3) => {
     utterance.onend = () => {
       count++;
       if (count < repeats) {
-        setTimeout(speakLoop, 900);
+        setTimeout(speakOnce, 800);
       } else {
-        isCurrentlySpeaking = false;
+        activeUtterance = null;
       }
     };
 
     utterance.onerror = () => {
-      isCurrentlySpeaking = false;
+      activeUtterance = null;
     };
+
+    // Keep global reference to prevent JavaScript garbage collection from silencing the audio
+    activeUtterance = utterance;
+    (window as unknown as { __activeUtterance?: SpeechSynthesisUtterance | null }).__activeUtterance = utterance;
 
     window.speechSynthesis.speak(utterance);
   };
 
-  speakLoop();
+  // Give 180ms delay after chime tone before speech begins
+  setTimeout(speakOnce, 180);
+};
+
+/**
+ * Daily Over Budget Alert:
+ * "วันนี้คุณใช้จ่ายเกินตามที่ตั้งไว้ พรุ่งนี้เริ่มต้นใหม่นะครับ สู้ๆนะครับ"
+ */
+export const playDailyOverBudgetVoiceAlert = (repeats: number = 2) => {
+  const message = 'วันนี้คุณใช้จ่ายเกินตามที่ตั้งไว้ พรุ่งนี้เริ่มต้นใหม่นะครับ สู้ๆนะครับ';
+  speakThaiMessage(message, repeats);
+};
+
+/**
+ * Monthly Over Budget Alert:
+ * "เดือนนี้ค่าใช้จ่ายประจำเดือนเกิน เดือนหน้าเริ่มต้นใหม่นะครับสู้ๆครับ"
+ */
+export const playMonthlyOverBudgetVoiceAlert = (repeats: number = 2) => {
+  const message = 'เดือนนี้ค่าใช้จ่ายประจำเดือนเกิน เดือนหน้าเริ่มต้นใหม่นะครับสู้ๆครับ';
+  speakThaiMessage(message, repeats);
+};
+
+/**
+ * Backward compatibility alias
+ */
+export const playOverBudgetVoiceAlert = (repeats: number = 2) => {
+  playDailyOverBudgetVoiceAlert(repeats);
 };

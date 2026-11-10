@@ -52,6 +52,7 @@ export interface UserLink {
 
 export interface AppSettings {
   appName: string;
+  slogan?: string;
   revision: string;
   coverImage: string;
   adminPhone: string;

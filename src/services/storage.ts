@@ -20,7 +20,8 @@ const DEFAULT_COVER_IMAGE = '/src/assets/images/cover_banner_1794189133145.jpg';
 
 export const DEFAULT_SETTINGS: AppSettings = {
   appName: 'บิลเฮา',
-  revision: 'Rev. 1.1.5',
+  slogan: 'ระบบเตือนและควบคุมรายจ่ายประจำวัน & เดือน',
+  revision: 'Rev. 1.1.6',
   coverImage: DEFAULT_COVER_IMAGE,
   adminPhone: '099-225-6601',
   adminName: 'ช่างหน่อยชุมแพ',
@@ -190,10 +191,19 @@ export const SEED_USER_LINKS: UserLink[] = [
   },
 ];
 
-// Helper functions for LocalStorage
+// Helper to scope storage by user token for complete data isolation across devices and links
+const getScopedKey = (baseKey: string, userToken?: string | null) => {
+  if (userToken && userToken.trim()) {
+    return `${baseKey}_u_${encodeURIComponent(userToken.trim().toLowerCase())}`;
+  }
+  return baseKey;
+};
+
+// Helper functions for LocalStorage with User Scoping
 export const storageService = {
-  getMonthlyBudget(): MonthlyBudgetConfig {
-    const data = localStorage.getItem(STORAGE_KEYS.MONTHLY_BUDGET);
+  getMonthlyBudget(userToken?: string | null): MonthlyBudgetConfig {
+    const key = getScopedKey(STORAGE_KEYS.MONTHLY_BUDGET, userToken);
+    const data = localStorage.getItem(key);
     if (!data) return DEFAULT_MONTHLY_BUDGET;
     try {
       return JSON.parse(data);
@@ -202,12 +212,14 @@ export const storageService = {
     }
   },
 
-  saveMonthlyBudget(budget: MonthlyBudgetConfig): void {
-    localStorage.setItem(STORAGE_KEYS.MONTHLY_BUDGET, JSON.stringify(budget));
+  saveMonthlyBudget(budget: MonthlyBudgetConfig, userToken?: string | null): void {
+    const key = getScopedKey(STORAGE_KEYS.MONTHLY_BUDGET, userToken);
+    localStorage.setItem(key, JSON.stringify(budget));
   },
 
-  getDailyBudget(): DailyBudgetConfig {
-    const data = localStorage.getItem(STORAGE_KEYS.DAILY_BUDGET);
+  getDailyBudget(userToken?: string | null): DailyBudgetConfig {
+    const key = getScopedKey(STORAGE_KEYS.DAILY_BUDGET, userToken);
+    const data = localStorage.getItem(key);
     if (!data) return DEFAULT_DAILY_BUDGET;
     try {
       return JSON.parse(data);
@@ -216,42 +228,57 @@ export const storageService = {
     }
   },
 
-  saveDailyBudget(budget: DailyBudgetConfig): void {
-    localStorage.setItem(STORAGE_KEYS.DAILY_BUDGET, JSON.stringify(budget));
+  saveDailyBudget(budget: DailyBudgetConfig, userToken?: string | null): void {
+    const key = getScopedKey(STORAGE_KEYS.DAILY_BUDGET, userToken);
+    localStorage.setItem(key, JSON.stringify(budget));
   },
 
-  getMonthlyExpenses(): MonthlyExpense[] {
-    const data = localStorage.getItem(STORAGE_KEYS.MONTHLY_EXPENSES);
+  getMonthlyExpenses(userToken?: string | null): MonthlyExpense[] {
+    const key = getScopedKey(STORAGE_KEYS.MONTHLY_EXPENSES, userToken);
+    const data = localStorage.getItem(key);
     if (!data) {
+      // User links start completely clean with 0 items!
+      if (userToken && userToken.trim()) {
+        this.saveMonthlyExpenses([], userToken);
+        return [];
+      }
       this.saveMonthlyExpenses(SEED_MONTHLY_EXPENSES);
       return SEED_MONTHLY_EXPENSES;
     }
     try {
       return JSON.parse(data);
     } catch {
-      return SEED_MONTHLY_EXPENSES;
+      return [];
     }
   },
 
-  saveMonthlyExpenses(expenses: MonthlyExpense[]): void {
-    localStorage.setItem(STORAGE_KEYS.MONTHLY_EXPENSES, JSON.stringify(expenses));
+  saveMonthlyExpenses(expenses: MonthlyExpense[], userToken?: string | null): void {
+    const key = getScopedKey(STORAGE_KEYS.MONTHLY_EXPENSES, userToken);
+    localStorage.setItem(key, JSON.stringify(expenses));
   },
 
-  getDailyExpenses(): DailyExpense[] {
-    const data = localStorage.getItem(STORAGE_KEYS.DAILY_EXPENSES);
+  getDailyExpenses(userToken?: string | null): DailyExpense[] {
+    const key = getScopedKey(STORAGE_KEYS.DAILY_EXPENSES, userToken);
+    const data = localStorage.getItem(key);
     if (!data) {
+      // User links start completely clean with 0 items!
+      if (userToken && userToken.trim()) {
+        this.saveDailyExpenses([], userToken);
+        return [];
+      }
       this.saveDailyExpenses(SEED_DAILY_EXPENSES);
       return SEED_DAILY_EXPENSES;
     }
     try {
       return JSON.parse(data);
     } catch {
-      return SEED_DAILY_EXPENSES;
+      return [];
     }
   },
 
-  saveDailyExpenses(expenses: DailyExpense[]): void {
-    localStorage.setItem(STORAGE_KEYS.DAILY_EXPENSES, JSON.stringify(expenses));
+  saveDailyExpenses(expenses: DailyExpense[], userToken?: string | null): void {
+    const key = getScopedKey(STORAGE_KEYS.DAILY_EXPENSES, userToken);
+    localStorage.setItem(key, JSON.stringify(expenses));
   },
 
   getUserLinks(): UserLink[] {
@@ -271,40 +298,43 @@ export const storageService = {
     localStorage.setItem(STORAGE_KEYS.USER_LINKS, JSON.stringify(links));
   },
 
-  getAppSettings(): AppSettings {
-    const data = localStorage.getItem(STORAGE_KEYS.APP_SETTINGS);
+  getAppSettings(userToken?: string | null, userName?: string): AppSettings {
+    const key = getScopedKey(STORAGE_KEYS.APP_SETTINGS, userToken);
+    const data = localStorage.getItem(key);
     if (!data) {
-      this.saveAppSettings(DEFAULT_SETTINGS);
-      return DEFAULT_SETTINGS;
+      const initial: AppSettings = {
+        ...DEFAULT_SETTINGS,
+        appName: userName ? `บิลของฉัน ${userName}` : (userToken ? 'บิลของฉัน' : 'บิลเฮา'),
+        slogan: userToken ? 'วางแผนการเงิน เพื่ออนาคตที่มั่นคง' : 'ระบบเตือนและควบคุมรายจ่ายประจำวัน & เดือน',
+        revision: 'Rev. 1.1.6',
+      };
+      this.saveAppSettings(initial, userToken);
+      return initial;
     }
     try {
       const parsed = JSON.parse(data);
-      const rev =
-        parsed.revision === 'Rev. 1.0.8' ||
-        parsed.revision === 'Rev. 1.0.9' ||
-        parsed.revision === 'Rev. 1.1.0' ||
-        parsed.revision === 'Rev. 1.1.1' ||
-        parsed.revision === 'Rev. 1.1.2' ||
-        parsed.revision === 'Rev. 1.1.3' ||
-        parsed.revision === 'Rev. 1.1.4'
-          ? 'Rev. 1.1.5'
-          : parsed.revision || 'Rev. 1.1.5';
-      return { ...DEFAULT_SETTINGS, ...parsed, revision: rev };
+      return {
+        ...DEFAULT_SETTINGS,
+        ...parsed,
+        revision: 'Rev. 1.1.6', // Real-time revision sync on every deploy!
+      };
     } catch {
       return DEFAULT_SETTINGS;
     }
   },
 
-  saveAppSettings(settings: AppSettings): void {
-    localStorage.setItem(STORAGE_KEYS.APP_SETTINGS, JSON.stringify(settings));
+  saveAppSettings(settings: AppSettings, userToken?: string | null): void {
+    const key = getScopedKey(STORAGE_KEYS.APP_SETTINGS, userToken);
+    localStorage.setItem(key, JSON.stringify(settings));
+  },
+
+  // Reset expenses for this specific user/device to 0 items
+  resetUserExpenses(userToken?: string | null): void {
+    this.saveMonthlyExpenses([], userToken);
+    this.saveDailyExpenses([], userToken);
   },
 
   resetAllData(): void {
-    localStorage.removeItem(STORAGE_KEYS.MONTHLY_BUDGET);
-    localStorage.removeItem(STORAGE_KEYS.DAILY_BUDGET);
-    localStorage.removeItem(STORAGE_KEYS.MONTHLY_EXPENSES);
-    localStorage.removeItem(STORAGE_KEYS.DAILY_EXPENSES);
-    localStorage.removeItem(STORAGE_KEYS.USER_LINKS);
-    localStorage.removeItem(STORAGE_KEYS.APP_SETTINGS);
+    localStorage.clear();
   },
 };

@@ -20,7 +20,7 @@ const DEFAULT_COVER_IMAGE = '/src/assets/images/cover_banner_1794189133145.jpg';
 
 export const DEFAULT_SETTINGS: AppSettings = {
   appName: 'บิลเฮา',
-  revision: 'Rev. 1.1.4',
+  revision: 'Rev. 1.1.5',
   coverImage: DEFAULT_COVER_IMAGE,
   adminPhone: '099-225-6601',
   adminName: 'ช่างหน่อยชุมแพ',
@@ -285,9 +285,10 @@ export const storageService = {
         parsed.revision === 'Rev. 1.1.0' ||
         parsed.revision === 'Rev. 1.1.1' ||
         parsed.revision === 'Rev. 1.1.2' ||
-        parsed.revision === 'Rev. 1.1.3'
-          ? 'Rev. 1.1.4'
-          : parsed.revision || 'Rev. 1.1.4';
+        parsed.revision === 'Rev. 1.1.3' ||
+        parsed.revision === 'Rev. 1.1.4'
+          ? 'Rev. 1.1.5'
+          : parsed.revision || 'Rev. 1.1.5';
       return { ...DEFAULT_SETTINGS, ...parsed, revision: rev };
     } catch {
       return DEFAULT_SETTINGS;

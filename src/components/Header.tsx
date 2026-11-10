@@ -1,5 +1,16 @@
 import React, { useState } from 'react';
-import { Shield, Sparkles, ChevronDown, ChevronUp, Volume2, AlertTriangle, Flame } from 'lucide-react';
+import {
+  Shield,
+  Sparkles,
+  ChevronDown,
+  ChevronUp,
+  Volume2,
+  AlertTriangle,
+  Flame,
+  Palette,
+  Sliders,
+  RotateCcw,
+} from 'lucide-react';
 import { AppSettings, MonthlyBudgetConfig, DailyBudgetConfig } from '../types';
 import { playOverBudgetVoiceAlert } from '../services/soundAlert';
 
@@ -10,6 +21,8 @@ interface HeaderProps {
   dailyBudget: DailyBudgetConfig;
   dailySpent: number;
   onOpenAdminAuth: () => void;
+  onOpenUserSettings: () => void;
+  onResetUserData?: () => void;
   isAdmin: boolean;
   isUserView: boolean;
 }
@@ -21,6 +34,8 @@ export const Header: React.FC<HeaderProps> = ({
   dailyBudget,
   dailySpent,
   onOpenAdminAuth,
+  onOpenUserSettings,
+  onResetUserData,
   isAdmin,
   isUserView,
 }) => {
@@ -103,6 +118,19 @@ export const Header: React.FC<HeaderProps> = ({
     setTimeout(() => setIsSpeaking(false), 8000);
   };
 
+  const handleDirectReset = () => {
+    if (
+      window.confirm(
+        'คุณต้องการเริ่มต้นระบบใหม่และล้างรายการค่าใช้จ่ายทั้งหมดของบัญชีนี้ใช่หรือไม่?\n\n(การกระทำนี้จะล้างรายการรายจ่ายประจำวันและประจำเดือนให้เป็น 0 เพื่อเริ่มบันทึกใหม่)'
+      )
+    ) {
+      if (onResetUserData) {
+        onResetUserData();
+        alert('เริ่มต้นระบบใหม่เรียบร้อยแล้ว รายการรายจ่ายทั้งหมดถูกล้างเป็น 0');
+      }
+    }
+  };
+
   return (
     <header className="w-full bg-white border-b border-slate-200/80 shadow-xs">
       {/* Top Bar */}
@@ -121,26 +149,55 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             </div>
             <p className="text-[10px] text-slate-500 leading-tight">
-              ระบบเตือนและควบคุมรายจ่ายประจำวัน & เดือน
+              {settings.slogan || 'ระบบเตือนและควบคุมรายจ่ายประจำวัน & เดือน'}
             </p>
           </div>
         </div>
 
-        {/* Right Action: Admin Access (Hidden if regular user link) */}
-        {!isUserView && (
+        {/* Right Actions */}
+        <div className="flex items-center gap-1.5">
+          {/* User Settings Button (Change cover, name, slogan, reset) */}
           <button
-            onClick={onOpenAdminAuth}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
-              isAdmin
-                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
-            }`}
-            title="เข้าสู่ระบบ Admin"
+            onClick={onOpenUserSettings}
+            type="button"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/90 hover:bg-emerald-100 transition-colors shadow-2xs"
+            title="ตั้งค่าหน้าปกและชื่อบิล"
           >
-            <Shield className="w-3.5 h-3.5" />
-            <span>{isAdmin ? 'แอดมิน' : 'เข้าแอดมิน'}</span>
+            <Palette className="w-3.5 h-3.5 text-emerald-600" />
+            <span className="hidden sm:inline">ตั้งค่าหน้าปก</span>
+            <span className="sm:hidden">ตั้งค่า</span>
           </button>
-        )}
+
+          {/* Direct Reset User Data Button */}
+          {onResetUserData && (
+            <button
+              onClick={handleDirectReset}
+              type="button"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200/90 hover:bg-rose-100 transition-colors shadow-2xs"
+              title="เริ่มต้นระบบใหม่ (ล้างข้อมูลรายการทั้งหมด)"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-rose-600" />
+              <span className="hidden sm:inline">เริ่มต้นระบบใหม่</span>
+              <span className="sm:hidden">เริ่มใหม่</span>
+            </button>
+          )}
+
+          {/* Admin Access (Hidden if regular user link) */}
+          {!isUserView && (
+            <button
+              onClick={onOpenAdminAuth}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium transition-all ${
+                isAdmin
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+              title="เข้าสู่ระบบ Admin"
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span>{isAdmin ? 'แอดมิน' : 'แอดมิน'}</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Cover Image Banner (Compact, space-saving) */}
@@ -148,13 +205,13 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-100 shadow-xs">
           <div
             className={`relative w-full transition-all duration-300 ${
-              imageExpanded ? 'h-36 sm:h-48' : 'h-20 sm:h-24'
+              imageExpanded ? 'h-36 sm:h-48' : 'h-24 sm:h-28'
             }`}
           >
             {!imgError && settings.coverImage ? (
               <img
                 src={settings.coverImage}
-                alt="หน้าปกบิลเฮา"
+                alt="หน้าปกบิล"
                 className="w-full h-full object-cover object-center"
                 onError={() => setImgError(true)}
               />
@@ -163,39 +220,60 @@ export const Header: React.FC<HeaderProps> = ({
                 <div className="text-center text-white">
                   <p className="text-xs font-semibold tracking-wide flex items-center justify-center gap-1">
                     <Sparkles className="w-3.5 h-3.5 text-emerald-300" />
-                    บิลเฮา - ระบบเตือนงบและรายจ่าย
+                    {settings.appName} - {settings.slogan || 'ระบบเตือนงบและรายจ่าย'}
                   </p>
                 </div>
               </div>
             )}
 
-            {/* Subtle Gradient Scrim & Info Overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-slate-950/20 to-transparent flex items-end justify-between p-2.5">
-              <div className="text-white">
-                <p className="text-xs font-bold text-white drop-shadow-xs">
-                  หน้าปก {settings.appName} ({settings.revision})
-                </p>
+            {/* Subtle Gradient Scrim & Info Overlay: Custom Name and Slogan */}
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/35 to-transparent flex items-end justify-between p-2.5 sm:p-3">
+              <div className="text-white min-w-0 pr-2">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <h2 className="text-sm sm:text-base font-extrabold text-white drop-shadow-md truncate">
+                    {settings.appName || 'บิลเฮา'}
+                  </h2>
+                  <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100/90 px-1.5 py-0.5 rounded-md font-mono shrink-0 shadow-2xs">
+                    {settings.revision}
+                  </span>
+                </div>
+                {settings.slogan && (
+                  <p className="text-[11px] sm:text-xs text-emerald-200 font-medium drop-shadow-sm truncate mt-0.5">
+                    {settings.slogan}
+                  </p>
+                )}
               </div>
 
-              {/* Toggle expand banner */}
-              <button
-                type="button"
-                onClick={() => setImageExpanded(!imageExpanded)}
-                className="px-2 py-0.5 rounded-md bg-black/40 hover:bg-black/60 text-[10px] text-white/90 backdrop-blur-xs flex items-center gap-1 border border-white/20 transition-colors"
-                title={imageExpanded ? 'ย่อรูปหน้าปก' : 'ขยายรูปหน้าปก'}
-              >
-                {imageExpanded ? (
-                  <>
-                    <ChevronUp className="w-3 h-3" />
-                    <span>ย่อ</span>
-                  </>
-                ) : (
-                  <>
-                    <ChevronDown className="w-3 h-3" />
-                    <span>ขยาย</span>
-                  </>
-                )}
-              </button>
+              {/* Actions on Cover Banner */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={onOpenUserSettings}
+                  className="px-2 py-1 rounded-lg bg-emerald-600/90 hover:bg-emerald-600 text-white text-[11px] font-semibold backdrop-blur-xs flex items-center gap-1 border border-emerald-400/40 shadow-xs transition-all active:scale-95"
+                  title="ตั้งค่าหน้าปกและชื่อบิล"
+                >
+                  <Palette className="w-3 h-3" />
+                  <span>แต่งหน้าปก</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setImageExpanded(!imageExpanded)}
+                  className="px-2 py-1 rounded-lg bg-black/40 hover:bg-black/60 text-[10px] text-white/90 backdrop-blur-xs flex items-center gap-1 border border-white/20 transition-colors"
+                  title={imageExpanded ? 'ย่อรูปหน้าปก' : 'ขยายรูปหน้าปก'}
+                >
+                  {imageExpanded ? (
+                    <>
+                      <ChevronUp className="w-3 h-3" />
+                      <span>ย่อ</span>
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="w-3 h-3" />
+                      <span>ขยาย</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

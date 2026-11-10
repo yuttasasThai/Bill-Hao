@@ -6,6 +6,7 @@ import {
   Settings2,
   Receipt,
   Wallet,
+  Phone,
 } from 'lucide-react';
 import {
   MonthlyBudgetConfig,
@@ -329,6 +330,22 @@ export const FourQuadrants: React.FC<FourQuadrantsProps> = ({
           </div>
         </div>
       </div>
+
+      {/* 4) ชื่อคนออกแบบโปรแกรมดูด้านล่างของหน้าแรก */}
+      <footer className="mt-5 pt-3 pb-8 text-center">
+        <div className="inline-flex items-center justify-center gap-1.5 flex-wrap px-4 py-1.5 rounded-2xl bg-white/90 border border-slate-200/90 shadow-2xs backdrop-blur-xs">
+          <span className="text-xs font-semibold text-slate-700">
+            สร้างสรรค์โดยช่างหน่อยชุมแพ
+          </span>
+          <a
+            href="tel:0992256601"
+            className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-300 transition-colors shadow-2xs"
+          >
+            <Phone className="w-3 h-3 text-emerald-600" />
+            <span>099-225-6601</span>
+          </a>
+        </div>
+      </footer>
     </div>
   );
 };

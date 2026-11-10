@@ -55,7 +55,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // App Settings / Revision
-  const [revision, setRevision] = useState(settings.revision || 'Rev. 1.1.6');
+  const [revision, setRevision] = useState(settings.revision || 'Rev. 1.1.7');
   const [appName, setAppName] = useState(settings.appName || 'บิลเฮา');
   const [adminPhone, setAdminPhone] = useState(settings.adminPhone || '099-225-6601');
   const [adminName, setAdminName] = useState(settings.adminName || 'ช่างหน่อยชุมแพ');

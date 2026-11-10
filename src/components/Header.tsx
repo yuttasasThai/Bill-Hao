@@ -12,7 +12,10 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { AppSettings, MonthlyBudgetConfig, DailyBudgetConfig } from '../types';
-import { playOverBudgetVoiceAlert } from '../services/soundAlert';
+import {
+  playDailyOverBudgetVoiceAlert,
+  playMonthlyOverBudgetVoiceAlert,
+} from '../services/soundAlert';
 
 interface HeaderProps {
   settings: AppSettings;
@@ -114,8 +117,18 @@ export const Header: React.FC<HeaderProps> = ({
 
   const handlePlayVoice = () => {
     setIsSpeaking(true);
-    playOverBudgetVoiceAlert(3);
-    setTimeout(() => setIsSpeaking(false), 8000);
+    if (isMonthlyOver && !isDailyOver) {
+      playMonthlyOverBudgetVoiceAlert(2);
+    } else if (isDailyOver && !isMonthlyOver) {
+      playDailyOverBudgetVoiceAlert(2);
+    } else if (isDailyOver && isMonthlyOver) {
+      playDailyOverBudgetVoiceAlert(1);
+      setTimeout(() => playMonthlyOverBudgetVoiceAlert(1), 3800);
+    } else {
+      // Demo voice alert
+      playDailyOverBudgetVoiceAlert(1);
+    }
+    setTimeout(() => setIsSpeaking(false), 5000);
   };
 
   const handleDirectReset = () => {

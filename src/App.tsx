@@ -27,9 +27,13 @@ import { DailyBudgetModal } from './components/DailyBudgetModal';
 import { DailyExpenseModal } from './components/DailyExpenseModal';
 import { AdminAuthModal } from './components/AdminAuthModal';
 import { ExpiredUserModal } from './components/ExpiredUserModal';
+import { UserSettingsModal } from './components/UserSettingsModal';
 import { playOverBudgetVoiceAlert } from './services/soundAlert';
 
 export default function App() {
+  // Current User Token (if accessing via user link ?user=xxx)
+  const [currentUserToken, setCurrentUserToken] = useState<string | null>(null);
+
   // Application Data States
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [monthlyBudget, setMonthlyBudget] = useState<MonthlyBudgetConfig>(DEFAULT_MONTHLY_BUDGET);
@@ -52,6 +56,7 @@ export default function App() {
   const [isTestExpiredModal, setIsTestExpiredModal] = useState(false);
 
   // Modals States
+  const [isUserSettingsOpen, setIsUserSettingsOpen] = useState(false);
   const [isMonthlyBudgetModalOpen, setIsMonthlyBudgetModalOpen] = useState(false);
   const [isMonthlyExpenseModalOpen, setIsMonthlyExpenseModalOpen] = useState(false);
   const [editingMonthlyExpense, setEditingMonthlyExpense] = useState<MonthlyExpense | null>(null);
@@ -60,45 +65,55 @@ export default function App() {
   const [isDailyExpenseModalOpen, setIsDailyExpenseModalOpen] = useState(false);
   const [editingDailyExpense, setEditingDailyExpense] = useState<DailyExpense | null>(null);
 
-  // Load Initial Data on Mount
+  // Load Initial Data on Mount with User Scoping
   useEffect(() => {
-    const loadedSettings = storageService.getAppSettings();
-    const loadedMonthlyBudget = storageService.getMonthlyBudget();
-    const loadedDailyBudget = storageService.getDailyBudget();
-    const loadedMonthlyExpenses = storageService.getMonthlyExpenses();
-    const loadedDailyExpenses = storageService.getDailyExpenses();
-    const loadedUserLinks = storageService.getUserLinks();
-
-    setSettings(loadedSettings);
-    setMonthlyBudget(loadedMonthlyBudget);
-    setDailyBudget(loadedDailyBudget);
-    setMonthlyExpenses(loadedMonthlyExpenses);
-    setDailyExpenses(loadedDailyExpenses);
-    setUserLinks(loadedUserLinks);
-
     // Check URL parameters for User Token or Admin
     const searchParams = new URLSearchParams(window.location.search);
     const userParam = searchParams.get('user');
     const adminParam = searchParams.get('admin');
 
-    if (userParam) {
+    const loadedUserLinks = storageService.getUserLinks();
+    setUserLinks(loadedUserLinks);
+
+    let activeToken: string | null = null;
+    let foundUserName: string | undefined = undefined;
+
+    if (userParam && userParam.trim()) {
+      activeToken = userParam.trim();
+      setCurrentUserToken(activeToken);
       setIsUserView(true);
-      // Check if user token exists and is valid
-      const foundUser = loadedUserLinks.find((u) => u.token === userParam);
+
+      // Check if user token exists in registered user links
+      const foundUser = loadedUserLinks.find((u) => u.token === activeToken);
       if (foundUser) {
+        foundUserName = foundUser.userName;
         const isExpired = new Date(foundUser.expiresAt).getTime() < Date.now();
         if (isExpired) {
           setExpiredUserName(foundUser.userName);
           setIsExpiredModalOpen(true);
         }
       } else {
-        // If unrecognized user token or mock expired token
+        // Fallback for mock expired user link
         if (userParam.includes('expired')) {
           setExpiredUserName('ผู้ใช้ทดสอบ');
           setIsExpiredModalOpen(true);
         }
       }
     }
+
+    // Load data scoped to this specific user token
+    // For a new user token, monthlyExpenses and dailyExpenses start 100% clean as []
+    const loadedSettings = storageService.getAppSettings(activeToken, foundUserName);
+    const loadedMonthlyBudget = storageService.getMonthlyBudget(activeToken);
+    const loadedDailyBudget = storageService.getDailyBudget(activeToken);
+    const loadedMonthlyExpenses = storageService.getMonthlyExpenses(activeToken);
+    const loadedDailyExpenses = storageService.getDailyExpenses(activeToken);
+
+    setSettings(loadedSettings);
+    setMonthlyBudget(loadedMonthlyBudget);
+    setDailyBudget(loadedDailyBudget);
+    setMonthlyExpenses(loadedMonthlyExpenses);
+    setDailyExpenses(loadedDailyExpenses);
 
     if (adminParam === 'true') {
       setIsAdminAuthOpen(true);
@@ -110,15 +125,15 @@ export default function App() {
     document.title = `${settings.appName} (${settings.revision}) - ระบบจัดการงบและค่าใช้จ่าย`;
   }, [settings.appName, settings.revision]);
 
-  // Save Handlers
+  // Save Handlers Scoped by currentUserToken
   const handleSaveMonthlyBudget = (newBudget: MonthlyBudgetConfig) => {
     setMonthlyBudget(newBudget);
-    storageService.saveMonthlyBudget(newBudget);
+    storageService.saveMonthlyBudget(newBudget, currentUserToken);
   };
 
   const handleSaveDailyBudget = (newBudget: DailyBudgetConfig) => {
     setDailyBudget(newBudget);
-    storageService.saveDailyBudget(newBudget);
+    storageService.saveDailyBudget(newBudget, currentUserToken);
   };
 
   const handleSaveMonthlyExpense = (
@@ -139,14 +154,14 @@ export default function App() {
       updated = [newItem, ...monthlyExpenses];
     }
     setMonthlyExpenses(updated);
-    storageService.saveMonthlyExpenses(updated);
+    storageService.saveMonthlyExpenses(updated, currentUserToken);
     setEditingMonthlyExpense(null);
   };
 
   const handleDeleteMonthlyExpense = (id: string) => {
     const updated = monthlyExpenses.filter((item) => item.id !== id);
     setMonthlyExpenses(updated);
-    storageService.saveMonthlyExpenses(updated);
+    storageService.saveMonthlyExpenses(updated, currentUserToken);
   };
 
   const handleToggleMonthlyStatus = (id: string) => {
@@ -160,7 +175,7 @@ export default function App() {
       };
     });
     setMonthlyExpenses(updated);
-    storageService.saveMonthlyExpenses(updated);
+    storageService.saveMonthlyExpenses(updated, currentUserToken);
   };
 
   const handleSaveDailyExpense = (
@@ -181,11 +196,10 @@ export default function App() {
       updated = [newItem, ...dailyExpenses];
     }
     setDailyExpenses(updated);
-    storageService.saveDailyExpenses(updated);
+    storageService.saveDailyExpenses(updated, currentUserToken);
     setEditingDailyExpense(null);
 
-    // 2.2) หากมีรายการที่เพิ่มล่าสุดทำให้เกินงบประจำวัน ให้มีเสียงเตือนดังขึ้น 2-3 รอบ:
-    // "วันนี้รายจ่ายเกินงบ พรุ่งนี้เริ่มใหม่นะครับ สู้ๆครับ"
+    // Voice Alert when daily budget exceeded
     const currentToday = new Date().toISOString().split('T')[0];
     const totalTodayAfter = updated
       .filter((e) => e.date === currentToday)
@@ -199,12 +213,19 @@ export default function App() {
   const handleDeleteDailyExpense = (id: string) => {
     const updated = dailyExpenses.filter((item) => item.id !== id);
     setDailyExpenses(updated);
-    storageService.saveDailyExpenses(updated);
+    storageService.saveDailyExpenses(updated, currentUserToken);
   };
 
   const handleSaveSettings = (newSettings: AppSettings) => {
     setSettings(newSettings);
-    storageService.saveAppSettings(newSettings);
+    storageService.saveAppSettings(newSettings, currentUserToken);
+  };
+
+  // Reset user data (clears all expenses for this user to 0 items)
+  const handleResetUserData = () => {
+    setMonthlyExpenses([]);
+    setDailyExpenses([]);
+    storageService.resetUserExpenses(currentUserToken);
   };
 
   const handleSaveUserLinks = (newLinks: UserLink[]) => {
@@ -212,31 +233,29 @@ export default function App() {
     storageService.saveUserLinks(newLinks);
   };
 
-  // Monthly spent calculation
+  // Calculations for budget percentages
   const monthlyTotalCommitted = monthlyExpenses.reduce(
     (sum, item) => sum + item.amount,
     0
   );
   const todayStr = new Date().toISOString().split('T')[0];
-  const currentMonthStr = todayStr.substring(0, 7);
-  const thisMonthDailySpent = dailyExpenses
-    .filter((e) => e.date.startsWith(currentMonthStr))
-    .reduce((sum, item) => sum + item.amount, 0);
-  const totalMonthlySpentCombined = monthlyTotalCommitted + thisMonthDailySpent;
-
-  // Daily spent calculation
   const todayDailySpent = dailyExpenses
     .filter((e) => e.date === todayStr)
-    .reduce((sum, item) => sum + item.amount, 0);
+    .reduce((sum, e) => sum + e.amount, 0);
 
-  // Tab navigation handler
+  const currentMonthStr = todayStr.substring(0, 7);
+  const monthDailyAccumulated = dailyExpenses
+    .filter((e) => e.date.startsWith(currentMonthStr))
+    .reduce((sum, e) => sum + e.amount, 0);
+
+  const totalMonthlySpentCombined = monthlyTotalCommitted + monthDailyAccumulated;
+
   const handleSelectPage = (page: ActivePage) => {
     if (page === 'admin' && !isAdmin) {
       setIsAdminAuthOpen(true);
       return;
     }
     setActivePage(page);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
@@ -255,6 +274,8 @@ export default function App() {
             setIsAdminAuthOpen(true);
           }
         }}
+        onOpenUserSettings={() => setIsUserSettingsOpen(true)}
+        onResetUserData={handleResetUserData}
         isAdmin={isAdmin}
         isUserView={isUserView}
       />
@@ -350,6 +371,16 @@ export default function App() {
       {/* ========================================================
           MODALS
           ======================================================== */}
+      {/* User Settings Modal (Custom Cover, Bill Name, Slogan, Reset Data) */}
+      <UserSettingsModal
+        isOpen={isUserSettingsOpen}
+        onClose={() => setIsUserSettingsOpen(false)}
+        settings={settings}
+        onSaveSettings={handleSaveSettings}
+        onResetData={handleResetUserData}
+        isUserView={isUserView}
+      />
+
       {/* 1.1.1) Monthly Budget Modal */}
       <MonthlyBudgetModal
         isOpen={isMonthlyBudgetModalOpen}

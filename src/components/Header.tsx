@@ -10,6 +10,7 @@ import {
   Palette,
   Sliders,
   RotateCcw,
+  Lock,
 } from 'lucide-react';
 import { AppSettings, MonthlyBudgetConfig, DailyBudgetConfig } from '../types';
 import {
@@ -26,6 +27,7 @@ interface HeaderProps {
   onOpenAdminAuth: () => void;
   onOpenUserSettings: () => void;
   onResetUserData?: () => void;
+  onLockApp?: () => void;
   isAdmin: boolean;
   isUserView: boolean;
 }
@@ -39,6 +41,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAdminAuth,
   onOpenUserSettings,
   onResetUserData,
+  onLockApp,
   isAdmin,
   isUserView,
 }) => {
@@ -169,15 +172,15 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right Actions */}
         <div className="flex items-center gap-1.5">
-          {/* User Settings Button (Change cover, name, slogan, reset) */}
+          {/* User Settings Button (Change cover, name, slogan, change password, reset) */}
           <button
             onClick={onOpenUserSettings}
             type="button"
             className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/90 hover:bg-emerald-100 transition-colors shadow-2xs"
-            title="ตั้งค่าหน้าปกและชื่อบิล"
+            title="ตั้งค่าหน้าปก ชื่อบิล และเปลี่ยนรหัสผ่าน"
           >
-            <Palette className="w-3.5 h-3.5 text-emerald-600" />
-            <span className="hidden sm:inline">ตั้งค่าหน้าปก</span>
+            <Sliders className="w-3.5 h-3.5 text-emerald-600" />
+            <span className="hidden sm:inline">ตั้งค่า / รหัสผ่าน</span>
             <span className="sm:hidden">ตั้งค่า</span>
           </button>
 
@@ -208,6 +211,18 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Shield className="w-3.5 h-3.5" />
               <span>{isAdmin ? 'แอดมิน' : 'แอดมิน'}</span>
+            </button>
+          )}
+
+          {/* Lock Screen Button */}
+          {onLockApp && (
+            <button
+              onClick={onLockApp}
+              type="button"
+              className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors"
+              title="ล็อกหน้าจอ / ใส่รหัสใหม่"
+            >
+              <Lock className="w-3.5 h-3.5 text-slate-600" />
             </button>
           )}
         </div>

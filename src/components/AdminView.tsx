@@ -55,7 +55,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // App Settings / Revision
-  const [revision, setRevision] = useState(settings.revision || 'Rev. 1.1.7');
+  const [revision, setRevision] = useState(settings.revision || 'Rev. 1.1.8');
   const [appName, setAppName] = useState(settings.appName || 'บิลเฮา');
   const [adminPhone, setAdminPhone] = useState(settings.adminPhone || '099-225-6601');
   const [adminName, setAdminName] = useState(settings.adminName || 'ช่างหน่อยชุมแพ');
@@ -156,7 +156,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
       token: uniqueToken,
       userName: newUserName.trim(),
       userPhone: newUserPhone.trim() || undefined,
-      password: newUserPassword.trim() || undefined,
+      password: newUserPassword.trim() || '1234',
       expiresAt,
       createdAt: new Date().toISOString(),
       isActive: true,
@@ -170,7 +170,31 @@ export const AdminView: React.FC<AdminViewProps> = ({
     setNewUserName('');
     setNewUserPhone('');
     setNewUserPassword('');
-    alert(`สร้างลิงก์สำหรับ "${newLink.userName}" สำเร็จแล้ว! สามารถกดคัดลอกลิงก์ส่งให้ผู้ใช้ได้ทันที`);
+    alert(`สร้างลิงก์สำหรับ "${newLink.userName}" สำเร็จแล้ว!\nรหัสผ่านเริ่มต้น: ${newLink.password}\nสามารถกดส่งข้อมูลให้ผู้ใช้ได้ทันที`);
+  };
+
+  // Copy Full Message (Link + Password + Info)
+  const handleCopyFullMessage = (link: UserLink) => {
+    const url = `${window.location.origin}${window.location.pathname}?user=${encodeURIComponent(link.token)}`;
+    const pass = link.password || '1234';
+    const text = `✨ ลิงก์เข้าใช้งานโปรแกรม ${settings.appName || 'บิลเฮา'}\n👤 บิลของคุณ: ${link.userName}\n🌐 ลิงก์เข้าใช้งาน: ${url}\n🔑 รหัสผ่านเข้าใช้งาน: ${pass}\n(คุณสามารถตั้งรหัสผ่านใหม่ได้ด้วยตัวเองในโปรแกรม)\n📞 สอบถามเพิ่มเติม ช่างหน่อยชุมแพ ${adminPhone}`;
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedToken(`full-${link.token}`);
+      setTimeout(() => setCopiedToken(null), 2500);
+    });
+  };
+
+  // Edit User Password directly by Admin
+  const handleEditPassword = (id: string, userName: string, currentPassword?: string) => {
+    const newPass = prompt(`แก้ไข/ตั้งรหัสผ่านใหม่สำหรับ คุณ "${userName}":`, currentPassword || '1234');
+    if (newPass === null) return;
+    const cleanPass = newPass.trim();
+    if (!cleanPass) {
+      alert('รหัสผ่านต้องไม่ว่างเปล่า');
+      return;
+    }
+    const updated = userLinks.map((l) => (l.id === id ? { ...l, password: cleanPass } : l));
+    onSaveUserLinks(updated);
   };
 
   // Renew User Link Expiration (+30, +90, +365 days)
@@ -668,6 +692,10 @@ export const AdminView: React.FC<AdminViewProps> = ({
                       </div>
 
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-[11px] text-slate-500">
+                        <span className="flex items-center gap-1 font-mono text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
+                          <Key className="w-3 h-3 text-teal-600" />
+                          รหัสผ่าน: <strong className="text-slate-900">{link.password || '1234'}</strong>
+                        </span>
                         <span className="flex items-center gap-1">
                           <Calendar className="w-3 h-3 text-slate-400" />
                           วันหมดอายุ: <strong>{expiryFormatted}</strong>
@@ -679,9 +707,33 @@ export const AdminView: React.FC<AdminViewProps> = ({
                       </div>
                     </div>
 
-                    {/* Actions: Renew (+30, +90d), Copy, Delete */}
+                    {/* Actions: Send Info (Link+Pass), Copy Link, Edit Pass, Renew (+30, +90d), Delete */}
                     <div className="flex flex-wrap items-center gap-1.5 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
-                      {/* Copy Link */}
+                      {/* Copy Full Message (Link + Password + Info) */}
+                      <button
+                        type="button"
+                        onClick={() => handleCopyFullMessage(link)}
+                        className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border flex items-center gap-1 transition-all ${
+                          copiedToken === `full-${link.token}`
+                            ? 'bg-teal-600 text-white border-teal-600'
+                            : 'bg-teal-50 hover:bg-teal-100 text-teal-800 border-teal-200'
+                        }`}
+                        title="คัดลอกข้อความพร้อมรหัสผ่านส่งให้ผู้ใช้ทางแชท/ไลน์"
+                      >
+                        {copiedToken === `full-${link.token}` ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" />
+                            <span>คัดลอกแล้ว!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+                            <span>ส่งข้อมูล+รหัส</span>
+                          </>
+                        )}
+                      </button>
+
+                      {/* Copy Link Only */}
                       <button
                         type="button"
                         onClick={() => handleCopyLink(link.token)}
@@ -690,7 +742,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                             ? 'bg-emerald-600 text-white border-emerald-600'
                             : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
                         }`}
-                        title="คัดลอกลิงก์สำหรับส่งให้ผู้ใช้"
+                        title="คัดลอกเฉพาะลิงก์"
                       >
                         {copiedToken === link.token ? (
                           <>
@@ -700,16 +752,26 @@ export const AdminView: React.FC<AdminViewProps> = ({
                         ) : (
                           <>
                             <Copy className="w-3.5 h-3.5" />
-                            <span>คัดลอกลิงก์</span>
+                            <span>ลิงก์</span>
                           </>
                         )}
+                      </button>
+
+                      {/* Edit Password Button */}
+                      <button
+                        type="button"
+                        onClick={() => handleEditPassword(link.id, link.userName, link.password)}
+                        className="p-1.5 rounded-lg text-slate-600 hover:text-teal-700 hover:bg-teal-50 border border-slate-200 hover:border-teal-200 transition-colors"
+                        title="แก้ไขรหัสผ่านของผู้ใช้นี้"
+                      >
+                        <Key className="w-3.5 h-3.5" />
                       </button>
 
                       {/* Renew Buttons */}
                       <button
                         type="button"
                         onClick={() => handleRenewLink(link.id, 30)}
-                        className="px-2 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 text-[11px] font-semibold border border-teal-200 transition-colors"
+                        className="px-2 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 text-[11px] font-semibold border border-slate-200 transition-colors"
                         title="ต่ออายุเพิ่มอีก 30 วัน"
                       >
                         +30 วัน
@@ -717,7 +779,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                       <button
                         type="button"
                         onClick={() => handleRenewLink(link.id, 90)}
-                        className="px-2 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 text-[11px] font-semibold border border-teal-200 transition-colors"
+                        className="px-2 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-700 text-[11px] font-semibold border border-slate-200 transition-colors"
                         title="ต่ออายุเพิ่มอีก 90 วัน"
                       >
                         +90 วัน

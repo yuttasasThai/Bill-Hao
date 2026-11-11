@@ -11,8 +11,15 @@ import {
   Sparkles,
   Type,
   Quote,
+  Lock,
+  Key,
+  Eye,
+  EyeOff,
+  Shield,
+  CheckCircle2,
 } from 'lucide-react';
 import { AppSettings } from '../types';
+import { storageService } from '../services/storage';
 
 interface UserSettingsModalProps {
   isOpen: boolean;
@@ -21,6 +28,8 @@ interface UserSettingsModalProps {
   onSaveSettings: (settings: AppSettings) => void;
   onResetData: () => void;
   isUserView: boolean;
+  userToken?: string | null;
+  onPasswordChanged?: (newPass: string) => void;
 }
 
 export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({
@@ -30,7 +39,10 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({
   onSaveSettings,
   onResetData,
   isUserView,
+  userToken,
+  onPasswordChanged,
 }) => {
+  const [activeTab, setActiveTab] = useState<'profile' | 'security'>('profile');
   const [appName, setAppName] = useState(settings.appName || 'บิลเฮา');
   const [slogan, setSlogan] = useState(settings.slogan || '');
   const [coverImage, setCoverImage] = useState(settings.coverImage || '');
@@ -38,6 +50,14 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({
   const [confirmResetOpen, setConfirmResetOpen] = useState(false);
   const [savedToast, setSavedToast] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Change Password States
+  const [currentPass, setCurrentPass] = useState('');
+  const [newPass, setNewPass] = useState('');
+  const [confirmPass, setConfirmPass] = useState('');
+  const [showPass, setShowPass] = useState(false);
+  const [passError, setPassError] = useState('');
+  const [passSuccessToast, setPassSuccessToast] = useState(false);
 
   if (!isOpen) return null;
 
@@ -100,6 +120,48 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({
     onClose();
   };
 
+  const handleChangePassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPassError('');
+
+    const existingPassword = storageService.getUserPassword(userToken) || '1234';
+    const cleanCurrent = currentPass.trim();
+
+    // Check if current matches existing password or master password
+    const isMaster =
+      cleanCurrent.replace(/[^0-9]/g, '') === '0992256601' ||
+      cleanCurrent === '099-225-6601';
+
+    if (!isMaster && cleanCurrent !== existingPassword) {
+      setPassError('รหัสผ่านเดิมไม่ถูกต้อง กรุณาตรวจสอบรหัสผ่านที่ได้รับจาก Admin');
+      return;
+    }
+
+    const cleanNew = newPass.trim();
+    if (cleanNew.length < 3) {
+      setPassError('รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย 3 ตัวอักษร');
+      return;
+    }
+
+    if (cleanNew !== confirmPass.trim()) {
+      setPassError('รหัสผ่านใหม่และการยืนยันรหัสผ่านไม่ตรงกัน');
+      return;
+    }
+
+    storageService.saveUserPassword(cleanNew, userToken);
+    if (onPasswordChanged) {
+      onPasswordChanged(cleanNew);
+    }
+
+    setCurrentPass('');
+    setNewPass('');
+    setConfirmPass('');
+    setPassSuccessToast(true);
+    setTimeout(() => {
+      setPassSuccessToast(false);
+    }, 3000);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/60 backdrop-blur-xs animate-fade-in overflow-y-auto">
       <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden my-auto animate-scale-in">
@@ -110,8 +172,8 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({
               <Palette className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h3 className="font-bold text-base leading-tight">ตั้งค่าหน้าปก & ข้อมูลบิล</h3>
-              <p className="text-xs text-emerald-100">ปรับแต่งชื่อ สโลแกน และรูปภาพหน้าปกของคุณ</p>
+              <h3 className="font-bold text-base leading-tight">ตั้งค่าโปรแกรม & ความปลอดภัย</h3>
+              <p className="text-xs text-emerald-100">ปรับแต่งชื่อ สโลแกน หน้าปก และรหัสผ่านเข้าใช้งาน</p>
             </div>
           </div>
           <button
@@ -123,9 +185,39 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({
           </button>
         </div>
 
-        {/* Form Body */}
-        <form onSubmit={handleSave} className="p-5 space-y-5 max-h-[80vh] overflow-y-auto">
-          {/* Live Preview on Cover */}
+        {/* Navigation Tabs */}
+        <div className="flex border-b border-slate-200 bg-slate-50/80 px-4 pt-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab('profile')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-t-xl transition-all border-b-2 ${
+              activeTab === 'profile'
+                ? 'bg-white text-emerald-800 border-emerald-600 shadow-2xs'
+                : 'text-slate-500 hover:text-slate-800 border-transparent hover:bg-slate-100/70'
+            }`}
+          >
+            <Palette className="w-3.5 h-3.5 text-emerald-600" />
+            <span>หน้าปก & ข้อมูลบิล</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('security')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-t-xl transition-all border-b-2 ${
+              activeTab === 'security'
+                ? 'bg-white text-emerald-800 border-emerald-600 shadow-2xs'
+                : 'text-slate-500 hover:text-slate-800 border-transparent hover:bg-slate-100/70'
+            }`}
+          >
+            <Key className="w-3.5 h-3.5 text-teal-600" />
+            <span>เปลี่ยนรหัสผ่าน</span>
+          </button>
+        </div>
+
+        {/* Form Body - Tab 1: Profile & Cover */}
+        {activeTab === 'profile' && (
+          <form onSubmit={handleSave} className="p-5 space-y-5 max-h-[80vh] overflow-y-auto animate-fade-in">
+            {/* Live Preview on Cover */}
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
               ตัวอย่างการแสดงผลบนหน้าปก
@@ -327,15 +419,127 @@ export const UserSettingsModal: React.FC<UserSettingsModalProps> = ({
             </button>
           </div>
         </form>
+      )}
 
-        {/* Toast */}
-        {savedToast && (
-          <div className="absolute top-4 right-4 bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-lg flex items-center gap-1.5 animate-bounce">
-            <Check className="w-3.5 h-3.5" />
-            <span>บันทึกการตั้งค่าสำเร็จ!</span>
+      {/* Form Body - Tab 2: Change Password (ตั้งรหัสผ่านใหม่ด้วยตัวเอง) */}
+      {activeTab === 'security' && (
+        <form onSubmit={handleChangePassword} className="p-5 space-y-4 max-h-[80vh] overflow-y-auto animate-fade-in">
+          <div className="bg-teal-50 border border-teal-200 rounded-2xl p-3.5 space-y-1">
+            <div className="flex items-center gap-2 text-teal-800 font-bold text-xs">
+              <Shield className="w-4 h-4 text-teal-600" />
+              <span>ความปลอดภัยของบิลคุณ</span>
+            </div>
+            <p className="text-[11px] text-teal-700 leading-relaxed">
+              คุณสามารถตั้งรหัสผ่านใหม่ได้ด้วยตนเอง เมื่อบันทึกแล้ว ทุกครั้งที่เปิดโปรแกรมหรือกดลิงค์บิลของคุณ ระบบจะใช้รหัสผ่านใหม่นี้ในการบูทเข้าใช้งาน
+            </p>
           </div>
-        )}
-      </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+              <Key className="w-3.5 h-3.5 text-teal-600" />
+              <span>1. รหัสผ่านเดิม (ที่ได้รับจาก Admin หรือรหัสปัจจุบัน) *</span>
+            </label>
+            <input
+              type={showPass ? 'text' : 'password'}
+              required
+              value={currentPass}
+              onChange={(e) => {
+                setCurrentPass(e.target.value);
+                if (passError) setPassError('');
+              }}
+              placeholder="กรอกรหัสผ่านเดิม..."
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-mono text-slate-900 focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 outline-hidden bg-slate-50/50"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+              <Lock className="w-3.5 h-3.5 text-emerald-600" />
+              <span>2. รหัสผ่านใหม่ที่คุณต้องการตั้ง *</span>
+            </label>
+            <input
+              type={showPass ? 'text' : 'password'}
+              required
+              value={newPass}
+              onChange={(e) => {
+                setNewPass(e.target.value);
+                if (passError) setPassError('');
+              }}
+              placeholder="เช่น 4-6 หลัก หรือคำที่คุณจำได้ง่าย"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-mono text-slate-900 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-hidden bg-slate-50/50"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span>3. ยืนยันรหัสผ่านใหม่อีกครั้ง *</span>
+            </label>
+            <input
+              type={showPass ? 'text' : 'password'}
+              required
+              value={confirmPass}
+              onChange={(e) => {
+                setConfirmPass(e.target.value);
+                if (passError) setPassError('');
+              }}
+              placeholder="กรอกรหัสผ่านใหม่อีกครั้งเพื่อยืนยัน..."
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-mono text-slate-900 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-hidden bg-slate-50/50"
+            />
+          </div>
+
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setShowPass(!showPass)}
+              className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1 font-medium"
+            >
+              {showPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              <span>{showPass ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}</span>
+            </button>
+          </div>
+
+          {passError && (
+            <p className="text-xs text-rose-600 font-semibold flex items-center gap-1 animate-shake">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+              <span>{passError}</span>
+            </p>
+          )}
+
+          <div className="flex gap-2.5 pt-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors"
+            >
+              ปิดหน้าต่าง
+            </button>
+            <button
+              type="submit"
+              className="flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-all shadow-md shadow-teal-600/20 active:scale-[0.98]"
+            >
+              <Save className="w-4 h-4" />
+              <span>บันทึกรหัสผ่านใหม่</span>
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* Toasts */}
+      {savedToast && (
+        <div className="absolute top-4 right-4 bg-emerald-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-lg flex items-center gap-1.5 animate-bounce z-50">
+          <Check className="w-3.5 h-3.5" />
+          <span>บันทึกการตั้งค่าสำเร็จ!</span>
+        </div>
+      )}
+
+      {passSuccessToast && (
+        <div className="absolute top-4 right-4 bg-teal-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-lg flex items-center gap-1.5 animate-bounce z-50">
+          <Check className="w-3.5 h-3.5" />
+          <span>เปลี่ยนรหัสผ่านใหม่สำเร็จแล้ว!</span>
+        </div>
+      )}
     </div>
-  );
+  </div>
+);
 };

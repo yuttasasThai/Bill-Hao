@@ -1,4 +1,4 @@
-# บิลเฮา (Rev. 1.1.7)
+# บิลเฮา (Rev. 1.1.9)
 
 โปรแกรมค่าใช้จ่ายประจำวันและเดือน เพื่อเตือนควบคุมรายจ่าย
 พัฒนาด้วย React 19 + TypeScript + Vite 8 + Tailwind CSS v4
@@ -27,7 +27,7 @@
    ```bash
    git init
    git add .
-   git commit -m "Deploy Bill Hao App Rev. 1.1.7"
+   git commit -m "Deploy Bill Hao App Rev. 1.1.9"
    git branch -M main
    git remote add origin https://github.com/<YOUR_USERNAME>/<YOUR_REPO_NAME>.git
    git push -u origin main --force

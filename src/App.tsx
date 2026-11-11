@@ -28,9 +28,17 @@ import { DailyExpenseModal } from './components/DailyExpenseModal';
 import { AdminAuthModal } from './components/AdminAuthModal';
 import { ExpiredUserModal } from './components/ExpiredUserModal';
 import { UserSettingsModal } from './components/UserSettingsModal';
-import { playOverBudgetVoiceAlert } from './services/soundAlert';
+import { BootLockScreen } from './components/BootLockScreen';
+import {
+  playDailyOverBudgetVoiceAlert,
+  playMonthlyOverBudgetVoiceAlert,
+} from './services/soundAlert';
 
 export default function App() {
+  // App Unlocked / Passcode Boot Gate
+  const [isAppUnlocked, setIsAppUnlocked] = useState(false);
+  const [currentUserLink, setCurrentUserLink] = useState<UserLink | undefined>(undefined);
+
   // Current User Token (if accessing via user link ?user=xxx)
   const [currentUserToken, setCurrentUserToken] = useState<string | null>(null);
 
@@ -86,6 +94,7 @@ export default function App() {
       // Check if user token exists in registered user links
       const foundUser = loadedUserLinks.find((u) => u.token === activeToken);
       if (foundUser) {
+        setCurrentUserLink(foundUser);
         foundUserName = foundUser.userName;
         const isExpired = new Date(foundUser.expiresAt).getTime() < Date.now();
         if (isExpired) {
@@ -129,11 +138,17 @@ export default function App() {
   const handleSaveMonthlyBudget = (newBudget: MonthlyBudgetConfig) => {
     setMonthlyBudget(newBudget);
     storageService.saveMonthlyBudget(newBudget, currentUserToken);
+    if (totalMonthlySpentCombined > (newBudget.amount || 0)) {
+      playMonthlyOverBudgetVoiceAlert(2);
+    }
   };
 
   const handleSaveDailyBudget = (newBudget: DailyBudgetConfig) => {
     setDailyBudget(newBudget);
     storageService.saveDailyBudget(newBudget, currentUserToken);
+    if (todayDailySpent > (newBudget.amount || 0)) {
+      playDailyOverBudgetVoiceAlert(2);
+    }
   };
 
   const handleSaveMonthlyExpense = (
@@ -156,6 +171,14 @@ export default function App() {
     setMonthlyExpenses(updated);
     storageService.saveMonthlyExpenses(updated, currentUserToken);
     setEditingMonthlyExpense(null);
+
+    // Voice Alert when monthly expenses exceed budget:
+    // "เดือนนี้ค่าใช้จ่ายประจำเดือนเกิน เดือนหน้าเริ่มต้นใหม่นะครับสู้ๆครับ"
+    const totalCommittedAfter = updated.reduce((sum, item) => sum + item.amount, 0);
+    const totalMonthAfter = totalCommittedAfter + monthDailyAccumulated;
+    if (totalMonthAfter > (monthlyBudget.amount || 0)) {
+      playMonthlyOverBudgetVoiceAlert(2);
+    }
   };
 
   const handleDeleteMonthlyExpense = (id: string) => {
@@ -199,14 +222,15 @@ export default function App() {
     storageService.saveDailyExpenses(updated, currentUserToken);
     setEditingDailyExpense(null);
 
-    // Voice Alert when daily budget exceeded
+    // Voice Alert when daily budget exceeded:
+    // "วันนี้คุณใช้จ่ายเกินตามที่ตั้งไว้ พรุ่งนี้เริ่มต้นใหม่นะครับ สู้ๆนะครับ"
     const currentToday = new Date().toISOString().split('T')[0];
     const totalTodayAfter = updated
       .filter((e) => e.date === currentToday)
       .reduce((sum, e) => sum + e.amount, 0);
 
     if (totalTodayAfter > (dailyBudget.amount || 0)) {
-      playOverBudgetVoiceAlert(3);
+      playDailyOverBudgetVoiceAlert(2);
     }
   };
 
@@ -258,6 +282,23 @@ export default function App() {
     setActivePage(page);
   };
 
+  // Passcode Gate & Booting Screen (3-4s showing cover image, app name, and typewriter creator)
+  if (!isAppUnlocked) {
+    return (
+      <BootLockScreen
+        settings={settings}
+        currentUserLink={currentUserLink}
+        isUserView={isUserView}
+        onUnlock={() => setIsAppUnlocked(true)}
+        onPasswordChange={(newPass) => {
+          if (currentUserLink) {
+            setCurrentUserLink({ ...currentUserLink, password: newPass });
+          }
+        }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans pb-16">
       {/* 1) Top Header & Cover Photo */}
@@ -276,6 +317,7 @@ export default function App() {
         }}
         onOpenUserSettings={() => setIsUserSettingsOpen(true)}
         onResetUserData={handleResetUserData}
+        onLockApp={() => setIsAppUnlocked(false)}
         isAdmin={isAdmin}
         isUserView={isUserView}
       />
@@ -371,7 +413,7 @@ export default function App() {
       {/* ========================================================
           MODALS
           ======================================================== */}
-      {/* User Settings Modal (Custom Cover, Bill Name, Slogan, Reset Data) */}
+      {/* User Settings Modal (Custom Cover, Bill Name, Slogan, Change Password, Reset Data) */}
       <UserSettingsModal
         isOpen={isUserSettingsOpen}
         onClose={() => setIsUserSettingsOpen(false)}
@@ -379,6 +421,12 @@ export default function App() {
         onSaveSettings={handleSaveSettings}
         onResetData={handleResetUserData}
         isUserView={isUserView}
+        userToken={currentUserToken}
+        onPasswordChanged={(newPass) => {
+          if (currentUserLink) {
+            setCurrentUserLink({ ...currentUserLink, password: newPass });
+          }
+        }}
       />
 
       {/* 1.1.1) Monthly Budget Modal */}

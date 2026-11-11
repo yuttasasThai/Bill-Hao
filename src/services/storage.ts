@@ -22,13 +22,13 @@ const DEFAULT_COVER_IMAGE = '/src/assets/images/cover_banner_1794189133145.jpg';
 export const DEFAULT_SETTINGS: AppSettings = {
   appName: 'บิลเฮา',
   slogan: 'ระบบเตือนและควบคุมรายจ่ายประจำวัน & เดือน',
-  revision: 'Rev. 1.1.9',
+  revision: 'Rev. 1.2.0',
   coverImage: DEFAULT_COVER_IMAGE,
   adminPhone: '099-225-6601',
   adminName: 'ช่างหน่อยชุมแพ',
 };
 
-const getTodayDateString = () => {
+export const getTodayDateString = (): string => {
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -36,7 +36,7 @@ const getTodayDateString = () => {
   return `${year}-${month}-${day}`;
 };
 
-const getCurrentMonthString = () => {
+export const getCurrentMonthString = (): string => {
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -307,7 +307,7 @@ export const storageService = {
         ...DEFAULT_SETTINGS,
         appName: userName ? `บิลของฉัน ${userName}` : (userToken ? 'บิลของฉัน' : 'บิลเฮา'),
         slogan: userToken ? 'วางแผนการเงิน เพื่ออนาคตที่มั่นคง' : 'ระบบเตือนและควบคุมรายจ่ายประจำวัน & เดือน',
-        revision: 'Rev. 1.1.9',
+        revision: 'Rev. 1.2.0',
       };
       this.saveAppSettings(initial, userToken);
       return initial;
@@ -317,7 +317,7 @@ export const storageService = {
       return {
         ...DEFAULT_SETTINGS,
         ...parsed,
-        revision: 'Rev. 1.1.9', // Real-time revision sync on every deploy!
+        revision: 'Rev. 1.2.0', // Real-time revision sync on every deploy!
       };
     } catch {
       return DEFAULT_SETTINGS;

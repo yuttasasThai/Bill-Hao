@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Wallet, Save, Trash2, Calendar, Clock } from 'lucide-react';
 import { DailyExpense } from '../types';
+import { getTodayDateString } from '../services/storage';
 
 interface DailyExpenseModalProps {
   isOpen: boolean;
@@ -36,7 +37,7 @@ export const DailyExpenseModal: React.FC<DailyExpenseModalProps> = ({
   onDelete,
   initialData,
 }) => {
-  const getToday = () => new Date().toISOString().split('T')[0];
+  const getToday = () => getTodayDateString();
   const getCurrentTime = () => {
     const d = new Date();
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;

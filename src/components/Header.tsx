@@ -122,16 +122,10 @@ export const Header: React.FC<HeaderProps> = ({
     setIsSpeaking(true);
     if (isMonthlyOver && !isDailyOver) {
       playMonthlyOverBudgetVoiceAlert(2);
-    } else if (isDailyOver && !isMonthlyOver) {
-      playDailyOverBudgetVoiceAlert(2);
-    } else if (isDailyOver && isMonthlyOver) {
-      playDailyOverBudgetVoiceAlert(1);
-      setTimeout(() => playMonthlyOverBudgetVoiceAlert(1), 3800);
     } else {
-      // Demo voice alert
-      playDailyOverBudgetVoiceAlert(1);
+      playDailyOverBudgetVoiceAlert(2);
     }
-    setTimeout(() => setIsSpeaking(false), 5000);
+    setTimeout(() => setIsSpeaking(false), 6000);
   };
 
   const handleDirectReset = () => {

@@ -14,6 +14,7 @@ const STORAGE_KEYS = {
   DAILY_EXPENSES: 'billhao_daily_expenses',
   USER_LINKS: 'billhao_user_links',
   APP_SETTINGS: 'billhao_app_settings',
+  USER_PASSWORD: 'billhao_user_password',
 };
 
 const DEFAULT_COVER_IMAGE = '/src/assets/images/cover_banner_1794189133145.jpg';
@@ -21,7 +22,7 @@ const DEFAULT_COVER_IMAGE = '/src/assets/images/cover_banner_1794189133145.jpg';
 export const DEFAULT_SETTINGS: AppSettings = {
   appName: 'บิลเฮา',
   slogan: 'ระบบเตือนและควบคุมรายจ่ายประจำวัน & เดือน',
-  revision: 'Rev. 1.1.7',
+  revision: 'Rev. 1.1.9',
   coverImage: DEFAULT_COVER_IMAGE,
   adminPhone: '099-225-6601',
   adminName: 'ช่างหน่อยชุมแพ',
@@ -306,7 +307,7 @@ export const storageService = {
         ...DEFAULT_SETTINGS,
         appName: userName ? `บิลของฉัน ${userName}` : (userToken ? 'บิลของฉัน' : 'บิลเฮา'),
         slogan: userToken ? 'วางแผนการเงิน เพื่ออนาคตที่มั่นคง' : 'ระบบเตือนและควบคุมรายจ่ายประจำวัน & เดือน',
-        revision: 'Rev. 1.1.7',
+        revision: 'Rev. 1.1.9',
       };
       this.saveAppSettings(initial, userToken);
       return initial;
@@ -316,7 +317,7 @@ export const storageService = {
       return {
         ...DEFAULT_SETTINGS,
         ...parsed,
-        revision: 'Rev. 1.1.7', // Real-time revision sync on every deploy!
+        revision: 'Rev. 1.1.9', // Real-time revision sync on every deploy!
       };
     } catch {
       return DEFAULT_SETTINGS;
@@ -326,6 +327,48 @@ export const storageService = {
   saveAppSettings(settings: AppSettings, userToken?: string | null): void {
     const key = getScopedKey(STORAGE_KEYS.APP_SETTINGS, userToken);
     localStorage.setItem(key, JSON.stringify(settings));
+  },
+
+  // Password Management: Get current password for a user link or app session
+  getUserPassword(userToken?: string | null): string | null {
+    // 1. Check user-specific custom saved password first
+    const scopedKey = getScopedKey(STORAGE_KEYS.USER_PASSWORD, userToken);
+    const customPass = localStorage.getItem(scopedKey);
+    if (customPass && customPass.trim()) {
+      return customPass.trim();
+    }
+
+    // 2. Check if this is a registered UserLink configured by Admin
+    if (userToken && userToken.trim()) {
+      const links = this.getUserLinks();
+      const foundLink = links.find(
+        (l) => l.token.toLowerCase() === userToken.trim().toLowerCase()
+      );
+      if (foundLink && foundLink.password && foundLink.password.trim()) {
+        return foundLink.password.trim();
+      }
+    }
+
+    return null;
+  },
+
+  // Save new password set by user or admin
+  saveUserPassword(newPassword: string, userToken?: string | null): void {
+    const cleanPass = newPassword.trim();
+    const scopedKey = getScopedKey(STORAGE_KEYS.USER_PASSWORD, userToken);
+    localStorage.setItem(scopedKey, cleanPass);
+
+    // Also update corresponding UserLink if userToken matches
+    if (userToken && userToken.trim()) {
+      const links = this.getUserLinks();
+      const updatedLinks = links.map((link) => {
+        if (link.token.toLowerCase() === userToken.trim().toLowerCase()) {
+          return { ...link, password: cleanPass };
+        }
+        return link;
+      });
+      this.saveUserLinks(updatedLinks);
+    }
   },
 
   // Reset expenses for this specific user/device to 0 items

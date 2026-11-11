@@ -12,6 +12,8 @@ import {
   DEFAULT_SETTINGS,
   DEFAULT_MONTHLY_BUDGET,
   DEFAULT_DAILY_BUDGET,
+  getTodayDateString,
+  getCurrentMonthString,
 } from './services/storage';
 
 import { Header } from './components/Header';
@@ -224,9 +226,9 @@ export default function App() {
 
     // Voice Alert when daily budget exceeded:
     // "วันนี้คุณใช้จ่ายเกินตามที่ตั้งไว้ พรุ่งนี้เริ่มต้นใหม่นะครับ สู้ๆนะครับ"
-    const currentToday = new Date().toISOString().split('T')[0];
+    const targetDate = expenseData.date || getTodayDateString();
     const totalTodayAfter = updated
-      .filter((e) => e.date === currentToday)
+      .filter((e) => e.date === targetDate || e.date === getTodayDateString())
       .reduce((sum, e) => sum + e.amount, 0);
 
     if (totalTodayAfter > (dailyBudget.amount || 0)) {
@@ -262,12 +264,12 @@ export default function App() {
     (sum, item) => sum + item.amount,
     0
   );
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getTodayDateString();
   const todayDailySpent = dailyExpenses
     .filter((e) => e.date === todayStr)
     .reduce((sum, e) => sum + e.amount, 0);
 
-  const currentMonthStr = todayStr.substring(0, 7);
+  const currentMonthStr = getCurrentMonthString();
   const monthDailyAccumulated = dailyExpenses
     .filter((e) => e.date.startsWith(currentMonthStr))
     .reduce((sum, e) => sum + e.amount, 0);

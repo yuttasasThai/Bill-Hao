@@ -14,6 +14,7 @@ import {
   DEFAULT_DAILY_BUDGET,
   getTodayDateString,
   getCurrentMonthString,
+  decodeUserLinkPayload,
 } from './services/storage';
 
 import { Header } from './components/Header';
@@ -34,7 +35,10 @@ import { BootLockScreen } from './components/BootLockScreen';
 import {
   playDailyOverBudgetVoiceAlert,
   playMonthlyOverBudgetVoiceAlert,
+  subscribeVoiceAlertBanner,
+  AlertType,
 } from './services/soundAlert';
+import { Volume2, X } from 'lucide-react';
 
 export default function App() {
   // App Unlocked / Passcode Boot Gate
@@ -75,11 +79,24 @@ export default function App() {
   const [isDailyExpenseModalOpen, setIsDailyExpenseModalOpen] = useState(false);
   const [editingDailyExpense, setEditingDailyExpense] = useState<DailyExpense | null>(null);
 
+  // Visual Voice Alert Banner State
+  const [voiceAlertBanner, setVoiceAlertBanner] = useState<{
+    type: AlertType;
+    message: string;
+  } | null>(null);
+
+  useEffect(() => {
+    return subscribeVoiceAlertBanner((info) => {
+      setVoiceAlertBanner(info);
+    });
+  }, []);
+
   // Load Initial Data on Mount with User Scoping
   useEffect(() => {
-    // Check URL parameters for User Token or Admin
+    // Check URL parameters for User Token, Encoded Link Payload, or Admin
     const searchParams = new URLSearchParams(window.location.search);
     const userParam = searchParams.get('user');
+    const codeParam = searchParams.get('c');
     const adminParam = searchParams.get('admin');
 
     const loadedUserLinks = storageService.getUserLinks();
@@ -93,14 +110,45 @@ export default function App() {
       setCurrentUserToken(activeToken);
       setIsUserView(true);
 
-      // Check if user token exists in registered user links
-      const foundUser = loadedUserLinks.find((u) => u.token === activeToken);
-      if (foundUser) {
-        setCurrentUserLink(foundUser);
-        foundUserName = foundUser.userName;
-        const isExpired = new Date(foundUser.expiresAt).getTime() < Date.now();
+      const decodedFromUrl = codeParam ? decodeUserLinkPayload(codeParam) : null;
+      const foundInStorage = loadedUserLinks.find((u) => u.token === activeToken);
+
+      if (decodedFromUrl && decodedFromUrl.token === activeToken) {
+        const resolvedUser: UserLink = {
+          id: foundInStorage?.id || `u-${activeToken}`,
+          token: activeToken,
+          userName: decodedFromUrl.userName || foundInStorage?.userName || 'ผู้ใช้งาน',
+          userPhone: decodedFromUrl.userPhone ?? foundInStorage?.userPhone,
+          password: decodedFromUrl.password || foundInStorage?.password || '1234',
+          expiresAt:
+            decodedFromUrl.expiresAt ||
+            foundInStorage?.expiresAt ||
+            new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          createdAt: foundInStorage?.createdAt || new Date().toISOString(),
+          isActive: foundInStorage?.isActive ?? true,
+          notes: foundInStorage?.notes,
+        };
+
+        // Sync decoded link into localStorage on this device so password/expiry persists cleanly
+        const updatedLinks = foundInStorage
+          ? loadedUserLinks.map((u) => (u.token === activeToken ? resolvedUser : u))
+          : [resolvedUser, ...loadedUserLinks];
+        storageService.saveUserLinks(updatedLinks);
+        setUserLinks(updatedLinks);
+
+        setCurrentUserLink(resolvedUser);
+        foundUserName = resolvedUser.userName;
+        const isExpired = new Date(resolvedUser.expiresAt).getTime() < Date.now();
         if (isExpired) {
-          setExpiredUserName(foundUser.userName);
+          setExpiredUserName(resolvedUser.userName);
+          setIsExpiredModalOpen(true);
+        }
+      } else if (foundInStorage) {
+        setCurrentUserLink(foundInStorage);
+        foundUserName = foundInStorage.userName;
+        const isExpired = new Date(foundInStorage.expiresAt).getTime() < Date.now();
+        if (isExpired) {
+          setExpiredUserName(foundInStorage.userName);
           setIsExpiredModalOpen(true);
         }
       } else {
@@ -290,6 +338,7 @@ export default function App() {
       <BootLockScreen
         settings={settings}
         currentUserLink={currentUserLink}
+        currentUserToken={currentUserToken}
         isUserView={isUserView}
         onUnlock={() => setIsAppUnlocked(true)}
         onPasswordChange={(newPass) => {
@@ -303,6 +352,35 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans pb-16">
+      {/* Floating Voice Alert Toast Banner */}
+      {voiceAlertBanner && (
+        <div className="fixed top-3 inset-x-0 z-50 flex justify-center px-3 pointer-events-none animate-fade-in">
+          <div className="pointer-events-auto max-w-md w-full rounded-2xl bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 text-white px-4 py-3 shadow-2xl border border-rose-400/50 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0 animate-pulse">
+              <Volume2 className="w-5 h-5 text-white" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-rose-100">
+                {voiceAlertBanner.type === 'daily'
+                  ? '⚠️ แจ้งเตือนรายจ่ายประจำวันเกินงบ'
+                  : '⚠️ แจ้งเตือนรายจ่ายประจำเดือนเกินงบ'}
+              </p>
+              <p className="text-xs sm:text-sm font-bold leading-snug mt-0.5">
+                &ldquo;{voiceAlertBanner.message}&rdquo;
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setVoiceAlertBanner(null)}
+              className="p-1 rounded-lg hover:bg-white/20 text-white/80 hover:text-white shrink-0"
+              aria-label="ปิดการแจ้งเตือน"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 1) Top Header & Cover Photo */}
       <Header
         settings={settings}

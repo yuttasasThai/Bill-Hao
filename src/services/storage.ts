@@ -22,7 +22,7 @@ const DEFAULT_COVER_IMAGE = '/src/assets/images/cover_banner_1794189133145.jpg';
 export const DEFAULT_SETTINGS: AppSettings = {
   appName: 'บิลเฮา',
   slogan: 'ระบบเตือนและควบคุมรายจ่ายประจำวัน & เดือน',
-  revision: 'Rev. 1.2.0',
+  revision: 'Rev. 1.2.1',
   coverImage: DEFAULT_COVER_IMAGE,
   adminPhone: '099-225-6601',
   adminName: 'ช่างหน่อยชุมแพ',
@@ -307,7 +307,7 @@ export const storageService = {
         ...DEFAULT_SETTINGS,
         appName: userName ? `บิลของฉัน ${userName}` : (userToken ? 'บิลของฉัน' : 'บิลเฮา'),
         slogan: userToken ? 'วางแผนการเงิน เพื่ออนาคตที่มั่นคง' : 'ระบบเตือนและควบคุมรายจ่ายประจำวัน & เดือน',
-        revision: 'Rev. 1.2.0',
+        revision: 'Rev. 1.2.1',
       };
       this.saveAppSettings(initial, userToken);
       return initial;
@@ -317,7 +317,7 @@ export const storageService = {
       return {
         ...DEFAULT_SETTINGS,
         ...parsed,
-        revision: 'Rev. 1.2.0', // Real-time revision sync on every deploy!
+        revision: 'Rev. 1.2.1', // Real-time revision sync on every deploy!
       };
     } catch {
       return DEFAULT_SETTINGS;
@@ -329,13 +329,28 @@ export const storageService = {
     localStorage.setItem(key, JSON.stringify(settings));
   },
 
-  // Password Management: Get current password for a user link or app session
-  getUserPassword(userToken?: string | null): string | null {
-    // 1. Check user-specific custom saved password first
+  // Get ONLY user's self-changed password stored on this device
+  getCustomOnlyPassword(userToken?: string | null): string | null {
     const scopedKey = getScopedKey(STORAGE_KEYS.USER_PASSWORD, userToken);
     const customPass = localStorage.getItem(scopedKey);
     if (customPass && customPass.trim()) {
       return customPass.trim();
+    }
+    return null;
+  },
+
+  // Clear custom password (used when Admin explicitly resets a user's password)
+  clearCustomOnlyPassword(userToken?: string | null): void {
+    const scopedKey = getScopedKey(STORAGE_KEYS.USER_PASSWORD, userToken);
+    localStorage.removeItem(scopedKey);
+  },
+
+  // Password Management: Get current password for a user link or app session
+  getUserPassword(userToken?: string | null): string | null {
+    // 1. Check user-specific custom saved password first
+    const customPass = this.getCustomOnlyPassword(userToken);
+    if (customPass) {
+      return customPass;
     }
 
     // 2. Check if this is a registered UserLink configured by Admin
@@ -381,3 +396,79 @@ export const storageService = {
     localStorage.clear();
   },
 };
+
+// =========================================================================
+// Cross-Device User Link Payload Codec
+// Encodes UserLink metadata (password, userName, phone, expiresAt) into URL
+// so links created by Admin work with the exact assigned password on ANY device!
+// =========================================================================
+const LINK_SECRET_SALT = 'BillHao#ChumPhae@2026!';
+
+function xorBytes(bytes: Uint8Array, salt: string): Uint8Array {
+  const saltBytes = new TextEncoder().encode(salt);
+  const out = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) {
+    out[i] = bytes[i] ^ saltBytes[i % saltBytes.length];
+  }
+  return out;
+}
+
+export function encodeUserLinkPayload(link: UserLink): string {
+  try {
+    const payload = {
+      t: link.token,
+      n: link.userName,
+      p: link.password || '1234',
+      ph: link.userPhone || '',
+      e: new Date(link.expiresAt).getTime(),
+    };
+    const jsonBytes = new TextEncoder().encode(JSON.stringify(payload));
+    const obfuscated = xorBytes(jsonBytes, LINK_SECRET_SALT);
+    let binary = '';
+    for (let i = 0; i < obfuscated.length; i++) {
+      binary += String.fromCharCode(obfuscated[i]);
+    }
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  } catch {
+    return '';
+  }
+}
+
+export function decodeUserLinkPayload(encoded: string): Partial<UserLink> | null {
+  try {
+    let base64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4 !== 0) base64 += '=';
+    const binary = atob(base64);
+    const obfuscated = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      obfuscated[i] = binary.charCodeAt(i);
+    }
+    const jsonBytes = xorBytes(obfuscated, LINK_SECRET_SALT);
+    const jsonStr = new TextDecoder().decode(jsonBytes);
+    const parsed = JSON.parse(jsonStr);
+    if (!parsed || typeof parsed.t !== 'string') return null;
+
+    return {
+      token: parsed.t,
+      userName: typeof parsed.n === 'string' ? parsed.n : undefined,
+      password: typeof parsed.p === 'string' && parsed.p ? parsed.p : undefined,
+      userPhone: typeof parsed.ph === 'string' && parsed.ph ? parsed.ph : undefined,
+      expiresAt:
+        typeof parsed.e === 'number' && !Number.isNaN(parsed.e)
+          ? new Date(parsed.e).toISOString()
+          : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function buildUserLinkUrl(link: UserLink): string {
+  const baseUrl = `${window.location.origin}${window.location.pathname}`;
+  const code = encodeUserLinkPayload(link);
+  if (code) {
+    return `${baseUrl}?user=${encodeURIComponent(link.token)}&c=${encodeURIComponent(code)}`;
+  }
+  return `${baseUrl}?user=${encodeURIComponent(link.token)}`;
+}
+

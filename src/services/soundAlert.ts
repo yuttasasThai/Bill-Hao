@@ -1,22 +1,46 @@
 /**
- * Bulletproof Voice and Chime Alert Service for Over-Budget Warnings
+ * Bulletproof Voice & Chime Alert Service for Over-Budget Warnings
  *
  * Supported Announcements:
  * 1. Daily Over Budget: "วันนี้คุณใช้จ่ายเกินตามที่ตั้งไว้ พรุ่งนี้เริ่มต้นใหม่นะครับ สู้ๆนะครับ"
  * 2. Monthly Over Budget: "เดือนนี้ค่าใช้จ่ายประจำเดือนเกิน เดือนหน้าเริ่มต้นใหม่นะครับสู้ๆครับ"
  *
- * Features:
- * - Dual Engine: High-fidelity natural Thai audio stream (HTML5 Audio) + Web Speech API fallback.
- * - Melodic 3-tone chime (Web Audio API) played before voice announcement.
- * - Global Audio Session Unlocker for iOS Safari, Android Chrome, and LINE / Facebook WebViews.
- * - Repetition support with natural pauses.
+ * Architecture:
+ * - Primary Engine: 100% Offline Embedded High-Fidelity Thai MP3 Data URIs (no external network, no Referer 404, no CORS).
+ * - Synchronous Start: Round 1 plays synchronously inside the user gesture (click/submit) to guarantee playback on iOS Safari, Android Chrome, and LINE WebView.
+ * - Chime: Web Audio API melodic notification chime played cleanly alongside voice.
+ * - Fallback Engine: Web Speech API (th-TH) if HTMLAudioElement is ever unavailable.
  */
+
+import { DAILY_OVER_BUDGET_AUDIO, MONTHLY_OVER_BUDGET_AUDIO } from './voiceAssets';
 
 let sharedAudioCtx: AudioContext | null = null;
 let cachedVoices: SpeechSynthesisVoice[] = [];
-let activeUtterance: SpeechSynthesisUtterance | null = null;
-let currentAudioElement: HTMLAudioElement | null = null;
+let persistentAudioPlayer: HTMLAudioElement | null = null;
 let isAudioUnlocked = false;
+let isCurrentlyPlayingVoice = false;
+let repeatTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+export type AlertType = 'daily' | 'monthly';
+export type AlertListener = (info: { type: AlertType; message: string } | null) => void;
+const alertListeners = new Set<AlertListener>();
+
+export const subscribeVoiceAlertBanner = (listener: AlertListener): (() => void) => {
+  alertListeners.add(listener);
+  return () => {
+    alertListeners.delete(listener);
+  };
+};
+
+const notifyAlertListeners = (info: { type: AlertType; message: string } | null) => {
+  alertListeners.forEach((fn) => {
+    try {
+      fn(info);
+    } catch {
+      // Non-fatal
+    }
+  });
+};
 
 // 1. Initialize and unlock Web Audio AudioContext
 export const getAudioContext = (): AudioContext | null => {
@@ -39,34 +63,47 @@ export const getAudioContext = (): AudioContext | null => {
   return sharedAudioCtx;
 };
 
-// 2. Universal Audio Session Unlocker for Mobile Browsers
+const getPersistentPlayer = (): HTMLAudioElement | null => {
+  if (typeof window === 'undefined') return null;
+  if (!persistentAudioPlayer) {
+    persistentAudioPlayer = new Audio();
+    persistentAudioPlayer.preload = 'auto';
+  }
+  return persistentAudioPlayer;
+};
+
+// 2. Universal Audio Session Unlocker for Mobile Browsers (iOS Safari / Android Chrome / LINE)
 export const unlockAudioSession = () => {
   if (isAudioUnlocked) return;
   try {
-    // A) Resume Web Audio
     const ctx = getAudioContext();
     if (ctx && ctx.state === 'suspended') {
       ctx.resume().catch(() => {});
     }
 
-    // B) Unlock SpeechSynthesis
     if ('speechSynthesis' in window) {
       window.speechSynthesis.resume();
     }
 
-    // C) Prime HTML5 Audio with a 1-sample silent data URI
-    const silentAudio = new Audio(
-      'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA=='
-    );
-    silentAudio.volume = 0.01;
-    silentAudio
-      .play()
-      .then(() => {
-        isAudioUnlocked = true;
-      })
-      .catch(() => {
-        // Handled silently
-      });
+    // Only prime the persistent player if it is NOT actively playing a real alert
+    if (!isCurrentlyPlayingVoice) {
+      const player = getPersistentPlayer();
+      if (player) {
+        player.src =
+          'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==';
+        player.volume = 0.01;
+        player
+          .play()
+          .then(() => {
+            player.pause();
+            player.volume = 1.0;
+            isAudioUnlocked = true;
+          })
+          .catch(() => {
+            // Will unlock on the next real user click
+          });
+      }
+    }
   } catch {
     // Non-fatal
   }
@@ -76,15 +113,11 @@ export const unlockAudioSession = () => {
 if (typeof window !== 'undefined') {
   const onUserInteraction = () => {
     unlockAudioSession();
-    window.removeEventListener('click', onUserInteraction);
-    window.removeEventListener('touchstart', onUserInteraction);
-    window.removeEventListener('keydown', onUserInteraction);
   };
-  window.addEventListener('click', onUserInteraction, { passive: true });
-  window.addEventListener('touchstart', onUserInteraction, { passive: true });
-  window.addEventListener('keydown', onUserInteraction, { passive: true });
+  window.addEventListener('click', onUserInteraction, { passive: true, once: true });
+  window.addEventListener('touchstart', onUserInteraction, { passive: true, once: true });
+  window.addEventListener('keydown', onUserInteraction, { passive: true, once: true });
 
-  // Preload speech synthesis voices cache
   if ('speechSynthesis' in window) {
     cachedVoices = window.speechSynthesis.getVoices();
     window.speechSynthesis.onvoiceschanged = () => {
@@ -94,7 +127,7 @@ if (typeof window !== 'undefined') {
 }
 
 /**
- * Play a clear, melodic 3-tone attention chime using Web Audio API
+ * Play a crisp 2-tone attention chime using Web Audio API (plays in first 200ms)
  */
 export const playAttentionChime = () => {
   try {
@@ -107,24 +140,24 @@ export const playAttentionChime = () => {
 
     const now = audioCtx.currentTime;
 
-    // 3 Ascending Notes: F5 (698.46Hz) -> A5 (880Hz) -> C6 (1046.5Hz)
-    const notes = [698.46, 880.0, 1046.5];
+    // 2 Bright Chime Notes: A5 (880Hz) -> C#6 (1108.73Hz)
+    const notes = [880.0, 1108.73];
     notes.forEach((freq, idx) => {
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
 
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+      osc.frequency.setValueAtTime(freq, now + idx * 0.08);
 
-      gain.gain.setValueAtTime(0, now + idx * 0.12);
-      gain.gain.linearRampToValueAtTime(0.28, now + idx * 0.12 + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.12 + 0.35);
+      gain.gain.setValueAtTime(0, now + idx * 0.08);
+      gain.gain.linearRampToValueAtTime(0.22, now + idx * 0.08 + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.22);
 
       osc.connect(gain);
       gain.connect(audioCtx.destination);
 
-      osc.start(now + idx * 0.12);
-      osc.stop(now + idx * 0.12 + 0.36);
+      osc.start(now + idx * 0.08);
+      osc.stop(now + idx * 0.08 + 0.24);
     });
   } catch {
     // Non-fatal
@@ -138,7 +171,6 @@ const speakWithSpeechSynthesis = (message: string, repeats: number = 2) => {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
 
   try {
-    window.speechSynthesis.cancel();
     window.speechSynthesis.resume();
   } catch {}
 
@@ -146,13 +178,9 @@ const speakWithSpeechSynthesis = (message: string, repeats: number = 2) => {
 
   const speakOnce = () => {
     if (count >= repeats) {
-      activeUtterance = null;
+      isCurrentlyPlayingVoice = false;
       return;
     }
-
-    try {
-      window.speechSynthesis.resume();
-    } catch {}
 
     const utterance = new SpeechSynthesisUtterance(message);
     utterance.lang = 'th-TH';
@@ -176,18 +204,18 @@ const speakWithSpeechSynthesis = (message: string, repeats: number = 2) => {
     utterance.onend = () => {
       count++;
       if (count < repeats) {
-        setTimeout(speakOnce, 700);
+        setTimeout(speakOnce, 600);
       } else {
-        activeUtterance = null;
+        isCurrentlyPlayingVoice = false;
       }
     };
 
     utterance.onerror = () => {
-      activeUtterance = null;
+      isCurrentlyPlayingVoice = false;
     };
 
-    activeUtterance = utterance;
-    (window as unknown as { __activeUtterance?: SpeechSynthesisUtterance | null }).__activeUtterance = utterance;
+    (window as unknown as { __activeUtterance?: SpeechSynthesisUtterance | null }).__activeUtterance =
+      utterance;
 
     window.speechSynthesis.speak(utterance);
   };
@@ -196,63 +224,85 @@ const speakWithSpeechSynthesis = (message: string, repeats: number = 2) => {
 };
 
 /**
- * Primary Voice Engine: Natural High-Fidelity Thai Voice Stream
- * Uses HTML5 Audio with fallback to Web Speech API
+ * Core Player: Plays embedded offline Thai MP3 synchronously inside user gesture
  */
-export const playThaiVoiceWithRepeats = (message: string, repeats: number = 2) => {
+const playEmbeddedThaiVoice = (
+  audioDataUri: string,
+  fallbackText: string,
+  type: AlertType,
+  repeats: number = 2
+) => {
   if (typeof window === 'undefined') return;
 
-  unlockAudioSession();
-  playAttentionChime();
+  // Notify visual toast banner listeners
+  notifyAlertListeners({ type, message: fallbackText });
+  setTimeout(() => {
+    notifyAlertListeners(null);
+  }, 7500);
 
-  // Stop any previously playing audio
-  if (currentAudioElement) {
-    try {
-      currentAudioElement.pause();
-      currentAudioElement.currentTime = 0;
-    } catch {}
-    currentAudioElement = null;
+  // Clear any pending repeat timer
+  if (repeatTimeoutId) {
+    clearTimeout(repeatTimeoutId);
+    repeatTimeoutId = null;
   }
 
-  // URL for crystal-clear natural Thai human voice
-  const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=th&q=${encodeURIComponent(
-    message
-  )}`;
+  // Play crisp Web Audio notification chime
+  playAttentionChime();
+
+  const player = getPersistentPlayer();
+  if (!player) {
+    speakWithSpeechSynthesis(fallbackText, repeats);
+    return;
+  }
 
   let playCount = 0;
+  isCurrentlyPlayingVoice = true;
 
-  const playStreamOnce = () => {
-    if (playCount >= repeats) {
-      currentAudioElement = null;
-      return;
+  // Stop previous playback cleanly
+  try {
+    player.pause();
+  } catch {}
+
+  player.src = audioDataUri;
+  player.volume = 1.0;
+  player.currentTime = 0;
+
+  player.onended = () => {
+    playCount++;
+    if (playCount < repeats) {
+      repeatTimeoutId = setTimeout(() => {
+        try {
+          player.currentTime = 0;
+          player.volume = 1.0;
+          player.play().catch(() => {
+            isCurrentlyPlayingVoice = false;
+          });
+        } catch {
+          isCurrentlyPlayingVoice = false;
+        }
+      }, 450);
+    } else {
+      isCurrentlyPlayingVoice = false;
     }
-
-    const audio = new Audio(ttsUrl);
-    audio.volume = 1.0;
-    currentAudioElement = audio;
-
-    audio.onended = () => {
-      playCount++;
-      if (playCount < repeats) {
-        setTimeout(playStreamOnce, 650);
-      } else {
-        currentAudioElement = null;
-      }
-    };
-
-    audio.onerror = () => {
-      // Fallback to speech synthesis if network or stream fails
-      speakWithSpeechSynthesis(message, repeats - playCount);
-    };
-
-    audio.play().catch(() => {
-      // If HTML5 Audio was blocked by autoplay policy, fallback to Web Speech API
-      speakWithSpeechSynthesis(message, repeats - playCount);
-    });
   };
 
-  // Small delay after chime before speech begins
-  setTimeout(playStreamOnce, 220);
+  player.onerror = () => {
+    isCurrentlyPlayingVoice = false;
+    speakWithSpeechSynthesis(fallbackText, Math.max(1, repeats - playCount));
+  };
+
+  // Call .play() SYNCHRONOUSLY inside the user's click/submit call stack!
+  try {
+    const playPromise = player.play();
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise.catch(() => {
+        // Fallback to Web Speech API if HTMLAudioElement is blocked
+        speakWithSpeechSynthesis(fallbackText, repeats);
+      });
+    }
+  } catch {
+    speakWithSpeechSynthesis(fallbackText, repeats);
+  }
 };
 
 /**
@@ -261,7 +311,7 @@ export const playThaiVoiceWithRepeats = (message: string, repeats: number = 2) =
  */
 export const playDailyOverBudgetVoiceAlert = (repeats: number = 2) => {
   const message = 'วันนี้คุณใช้จ่ายเกินตามที่ตั้งไว้ พรุ่งนี้เริ่มต้นใหม่นะครับ สู้ๆนะครับ';
-  playThaiVoiceWithRepeats(message, repeats);
+  playEmbeddedThaiVoice(DAILY_OVER_BUDGET_AUDIO, message, 'daily', repeats);
 };
 
 /**
@@ -270,7 +320,7 @@ export const playDailyOverBudgetVoiceAlert = (repeats: number = 2) => {
  */
 export const playMonthlyOverBudgetVoiceAlert = (repeats: number = 2) => {
   const message = 'เดือนนี้ค่าใช้จ่ายประจำเดือนเกิน เดือนหน้าเริ่มต้นใหม่นะครับสู้ๆครับ';
-  playThaiVoiceWithRepeats(message, repeats);
+  playEmbeddedThaiVoice(MONTHLY_OVER_BUDGET_AUDIO, message, 'monthly', repeats);
 };
 
 /**

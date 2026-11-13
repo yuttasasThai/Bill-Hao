@@ -14,6 +14,7 @@ import {
   MonthlyExpense,
   DailyExpense,
 } from '../types';
+import { getTodayDateString, getCurrentMonthString } from '../services/storage';
 
 interface FourQuadrantsProps {
   monthlyBudget: MonthlyBudgetConfig;
@@ -49,16 +50,16 @@ export const FourQuadrants: React.FC<FourQuadrantsProps> = ({
     .filter((item) => item.isPaid)
     .reduce((sum, item) => sum + item.amount, 0);
 
-  // Today string YYYY-MM-DD
-  const todayStr = new Date().toISOString().split('T')[0];
+  // Today string YYYY-MM-DD (local time)
+  const todayStr = getTodayDateString();
   const todayExpenses = dailyExpenses.filter((item) => item.date === todayStr);
   const totalDailySpent = todayExpenses.reduce(
     (sum, item) => sum + item.amount,
     0
   );
 
-  // Current Month string YYYY-MM
-  const currentMonthStr = todayStr.substring(0, 7);
+  // Current Month string YYYY-MM (local time)
+  const currentMonthStr = getCurrentMonthString();
   // Accumulated daily expenses ONLY for current month (resets automatically in new month)
   const monthDailyExpenses = dailyExpenses.filter((item) =>
     item.date.startsWith(currentMonthStr)

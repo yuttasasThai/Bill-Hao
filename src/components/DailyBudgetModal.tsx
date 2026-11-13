@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Clock, AlertCircle, Save } from 'lucide-react';
 import { DailyBudgetConfig } from '../types';
 
@@ -20,6 +20,14 @@ export const DailyBudgetModal: React.FC<DailyBudgetModalProps> = ({
     currentBudget.warningThresholdPercent
   );
   const [note, setNote] = useState<string>(currentBudget.note || '');
+
+  useEffect(() => {
+    if (isOpen) {
+      setAmount(String(currentBudget.amount));
+      setWarningThreshold(currentBudget.warningThresholdPercent);
+      setNote(currentBudget.note || '');
+    }
+  }, [isOpen, currentBudget]);
 
   if (!isOpen) return null;
 

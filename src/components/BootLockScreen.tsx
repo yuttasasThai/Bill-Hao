@@ -19,6 +19,7 @@ import { storageService } from '../services/storage';
 interface BootLockScreenProps {
   settings: AppSettings;
   currentUserLink?: UserLink;
+  currentUserToken?: string | null;
   isUserView: boolean;
   onUnlock: () => void;
   onPasswordChange?: (newPass: string) => void;
@@ -27,9 +28,10 @@ interface BootLockScreenProps {
 export const BootLockScreen: React.FC<BootLockScreenProps> = ({
   settings,
   currentUserLink,
-  isUserView,
+  currentUserToken,
+  isUserView: _isUserView,
   onUnlock,
-  onPasswordChange,
+  onPasswordChange: _onPasswordChange,
 }) => {
   const [phase, setPhase] = useState<'passcode' | 'booting'>('passcode');
   const [password, setPassword] = useState('');
@@ -40,47 +42,37 @@ export const BootLockScreen: React.FC<BootLockScreenProps> = ({
   const [bootMessage, setBootMessage] = useState('กำลังบูทระบบ...');
 
   // Target passwords for this session:
-  // 1. Password assigned by admin on the UserLink (or default 1234)
+  // 1. Master password '099-225-6601' / '0992256601' (Master Admin override)
   // 2. Custom password set by user in the Settings menu (บันทึกจากเมนูตั้งค่า)
-  // 3. User phone number (if registered)
-  // 4. Master password '099-225-6601' / '0992256601' (Master override)
-  // 5. Default '1234' if none configured
+  // 3. Password assigned by Admin on the UserLink
+  // 4. Default '1234' ONLY if no custom or Admin-assigned password exists
   const validatePassword = (input: string): boolean => {
     const cleanInput = input.trim();
     const cleanDigits = input.replace(/[^0-9]/g, '');
 
-    // Master password always works
+    // Master password always works for Admin recovery
     if (cleanDigits === '0992256601' || cleanInput === '099-225-6601') {
       return true;
     }
 
-    // 1. Check custom saved user password for this user link/device (set via Settings menu)
-    const userStoredPassword = storageService.getUserPassword(currentUserLink?.token);
-    if (userStoredPassword && cleanInput === userStoredPassword) {
-      return true;
+    const activeToken = currentUserLink?.token || currentUserToken;
+
+    // 1. If user explicitly set their own custom password via Settings menu, enforce THAT password
+    const customPassword = storageService.getCustomOnlyPassword(activeToken);
+    if (customPassword) {
+      return cleanInput === customPassword;
     }
 
-    // 2. Check if admin configured a specific password on this UserLink
-    if (currentUserLink?.password && currentUserLink.password.trim()) {
-      if (cleanInput === currentUserLink.password.trim()) {
-        return true;
-      }
+    // 2. Otherwise, check Admin-assigned password on this UserLink (or stored UserLink)
+    const linkPassword =
+      currentUserLink?.password?.trim() ||
+      storageService.getUserPassword(activeToken);
+    if (linkPassword) {
+      return cleanInput === linkPassword;
     }
 
-    // 3. If user phone is registered on link, phone number also works as password
-    if (currentUserLink?.userPhone) {
-      const cleanPhone = currentUserLink.userPhone.replace(/[^0-9]/g, '');
-      if (cleanDigits === cleanPhone && cleanDigits.length >= 8) {
-        return true;
-      }
-    }
-
-    // 4. Default universal passcode if no specific password was configured
-    if (!currentUserLink?.password && !userStoredPassword && (cleanDigits === '1234' || cleanInput === '1234')) {
-      return true;
-    }
-
-    return false;
+    // 3. Default universal passcode ONLY when no specific password was configured
+    return cleanDigits === '1234' || cleanInput === '1234';
   };
 
   const handlePasswordSubmit = (e?: React.FormEvent) => {

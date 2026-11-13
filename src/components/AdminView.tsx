@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { AppSettings, UserLink } from '../types';
 import { generateSourceZip, downloadBlob } from '../services/zipExporter';
+import { buildUserLinkUrl, storageService } from '../services/storage';
 
 interface AdminViewProps {
   settings: AppSettings;
@@ -175,9 +176,9 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
   // Copy Full Message (Link + Password + Info)
   const handleCopyFullMessage = (link: UserLink) => {
-    const url = `${window.location.origin}${window.location.pathname}?user=${encodeURIComponent(link.token)}`;
+    const url = buildUserLinkUrl(link);
     const pass = link.password || '1234';
-    const text = `✨ ลิงก์เข้าใช้งานโปรแกรม ${settings.appName || 'บิลเฮา'}\n👤 บิลของคุณ: ${link.userName}\n🌐 ลิงก์เข้าใช้งาน: ${url}\n🔑 รหัสผ่านเข้าใช้งาน: ${pass}\n(คุณสามารถตั้งรหัสผ่านใหม่ได้ด้วยตัวเองในโปรแกรม)\n📞 สอบถามเพิ่มเติม ช่างหน่อยชุมแพ ${adminPhone}`;
+    const text = `✨ ลิงก์เข้าใช้งานโปรแกรม ${settings.appName || 'บิลเฮา'}\n👤 บิลของคุณ: ${link.userName}\n🌐 ลิงก์เข้าใช้งาน: ${url}\n🔑 รหัสผ่านเข้าใช้งาน: ${pass}\n(คุณสามารถตั้งรหัสผ่านใหม่ได้ด้วยตัวเองในเมนูตั้งค่า)\n📞 สอบถามเพิ่มเติม ช่างหน่อยชุมแพ ${adminPhone}`;
     navigator.clipboard.writeText(text).then(() => {
       setCopiedToken(`full-${link.token}`);
       setTimeout(() => setCopiedToken(null), 2500);
@@ -192,6 +193,10 @@ export const AdminView: React.FC<AdminViewProps> = ({
     if (!cleanPass) {
       alert('รหัสผ่านต้องไม่ว่างเปล่า');
       return;
+    }
+    const targetLink = userLinks.find((l) => l.id === id);
+    if (targetLink) {
+      storageService.clearCustomOnlyPassword(targetLink.token);
     }
     const updated = userLinks.map((l) => (l.id === id ? { ...l, password: cleanPass } : l));
     onSaveUserLinks(updated);
@@ -223,10 +228,10 @@ export const AdminView: React.FC<AdminViewProps> = ({
   };
 
   // Copy Link Helper
-  const handleCopyLink = (token: string) => {
-    const url = `${window.location.origin}${window.location.pathname}?user=${encodeURIComponent(token)}`;
+  const handleCopyLink = (link: UserLink) => {
+    const url = buildUserLinkUrl(link);
     navigator.clipboard.writeText(url).then(() => {
-      setCopiedToken(token);
+      setCopiedToken(link.token);
       setTimeout(() => setCopiedToken(null), 2500);
     });
   };
@@ -567,13 +572,13 @@ export const AdminView: React.FC<AdminViewProps> = ({
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    รหัสผ่าน (ถ้ามี)
+                    รหัสผ่านเข้าใช้งาน (ว่างไว้ = 1234)
                   </label>
                   <input
-                    type="password"
+                    type="text"
                     value={newUserPassword}
                     onChange={(e) => setNewUserPassword(e.target.value)}
-                    placeholder="กำหนดรหัสผ่าน..."
+                    placeholder="เช่น 4321, 1123"
                     className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono"
                   />
                 </div>
@@ -736,7 +741,7 @@ export const AdminView: React.FC<AdminViewProps> = ({
                       {/* Copy Link Only */}
                       <button
                         type="button"
-                        onClick={() => handleCopyLink(link.token)}
+                        onClick={() => handleCopyLink(link)}
                         className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border flex items-center gap-1 transition-all ${
                           copiedToken === link.token
                             ? 'bg-emerald-600 text-white border-emerald-600'
